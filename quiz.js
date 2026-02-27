@@ -135,56 +135,47 @@
   // ================================================================
 
   function stopTimer() {
-    cancelAnimationFrame(timerId);
+    clearInterval(timerId);
     timerId = null;
-  }
 
-  function updateTimerUI() {
-    if (UI.timerText) UI.timerText.textContent = String(timeRemaining);
-    if (UI.timerBar)  UI.timerBar.style.width  = Math.max(0, (timeRemaining / QUESTION_TIME) * 100) + '%';
-    if (timerWrap)    timerWrap.setAttribute('data-warning', timeRemaining <= 5 ? 'true' : 'false');
+    // Freeze the bar exactly where it is mid-animation
+    if (UI.timerBar) {
+      const currentW  = parseFloat(getComputedStyle(UI.timerBar).width);
+      const parentW   = UI.timerBar.parentElement?.offsetWidth || 1;
+      UI.timerBar.style.transition = 'none';
+      UI.timerBar.style.width      = (currentW / parentW * 100).toFixed(3) + '%';
+    }
   }
 
   function startTimer() {
     stopTimer();
     timeRemaining = QUESTION_TIME;
-    updateTimerUI();
 
-    const totalMs  = QUESTION_TIME * 1000;
-    const startedAt = performance.now();
-    let lastSecond = QUESTION_TIME;
-
-    function tick(now) {
-      const elapsed   = now - startedAt;
-      const remaining = Math.max(0, totalMs - elapsed);
-
-      // Bar updates every frame — smooth
-      if (UI.timerBar) {
-        UI.timerBar.style.width = (remaining / totalMs * 100) + '%';
-      }
-
-      // Text + warning update only when the second changes
-      const secs = Math.ceil(remaining / 1000);
-      if (secs !== lastSecond) {
-        lastSecond    = secs;
-        timeRemaining = secs;
-        if (UI.timerText) UI.timerText.textContent = String(secs);
-        if (timerWrap)    timerWrap.setAttribute('data-warning', secs <= 5 ? 'true' : 'false');
-      }
-
-      if (remaining <= 0) {
-        timeRemaining = 0;
-        if (UI.timerBar)  UI.timerBar.style.width        = '0%';
-        if (UI.timerText) UI.timerText.textContent        = '0';
-        if (timerWrap)    timerWrap.setAttribute('data-warning', 'true');
-        onTimeout();
-        return;
-      }
-
-      timerId = requestAnimationFrame(tick);
+    // Snap bar to 100% instantly (no transition), then kick off smooth ticks
+    if (UI.timerBar) {
+      UI.timerBar.style.transition = 'none';
+      UI.timerBar.style.width      = '100%';
+      UI.timerBar.getBoundingClientRect(); // force reflow before re-enabling transition
     }
+    if (UI.timerText) UI.timerText.textContent = String(QUESTION_TIME);
+    if (timerWrap)    timerWrap.setAttribute('data-warning', 'false');
 
-    timerId = requestAnimationFrame(tick);
+    timerId = setInterval(() => {
+      timeRemaining -= 1;
+
+      // CSS transition handles the smooth glide between each 1-second step
+      if (UI.timerBar) {
+        UI.timerBar.style.transition = 'width 1s linear';
+        UI.timerBar.style.width      = Math.max(0, (timeRemaining / QUESTION_TIME) * 100) + '%';
+      }
+      if (UI.timerText) UI.timerText.textContent = String(Math.max(0, timeRemaining));
+      if (timerWrap)    timerWrap.setAttribute('data-warning', timeRemaining <= 5 ? 'true' : 'false');
+
+      if (timeRemaining <= 0) {
+        stopTimer();
+        onTimeout();
+      }
+    }, 1000);
   }
 
   // ================================================================
