@@ -71,13 +71,16 @@
 
   function prepareAllQuestions() {
     questionEls.forEach((qEl, index) => {
-      const answerBtns = getAnswerBtns(qEl);
-      const correctEl  = answerBtns.find(b => b.getAttribute('data-correct') === 'true')
-                         || answerBtns[0]; // fallback: first answer if none marked
-      correctEls[index] = correctEl;
-
-      // Strip data-correct from every answer — never visible in DOM until reveal
-      answerBtns.forEach(b => b.removeAttribute('data-correct'));
+      const answerBtns   = getAnswerBtns(qEl);
+      // Read the correct answer index from the question element (authored in Webflow).
+      // This avoids relying on answer-button attributes which Webflow can override to
+      // "false" via IX2 initial states before the script has a chance to read them.
+      const correctIndex = parseInt(qEl.getAttribute('data-correct-answer'), 10);
+      const correctEl    = (!isNaN(correctIndex) && answerBtns[correctIndex])
+                           ? answerBtns[correctIndex]
+                           : answerBtns[0]; // fallback: first answer if attribute missing
+      correctEls[index]  = correctEl;
+      // Nothing to strip — correctness is on the question element, not the answers
     });
   }
 
