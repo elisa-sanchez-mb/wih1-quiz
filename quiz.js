@@ -48,9 +48,9 @@
     timeoutAnswerSpan: el('answer', timeoutOverlay),
   };
 
-  // Submit + Next live inside each question — always look up from current question
-  function getSubmitBtn() { return el('submit-btn', currentQ()); }
-  function getNextBtn()   { return el('next-btn',   currentQ()); }
+  // Look for submit/next inside the current question first, fall back to screen-quiz
+  function getSubmitBtn() { return el('submit-btn', currentQ()) || el('submit-btn', screenQuiz); }
+  function getNextBtn()   { return el('next-btn',   currentQ()) || el('next-btn',   screenQuiz); }
 
   // ================================================================
   // QUESTIONS
