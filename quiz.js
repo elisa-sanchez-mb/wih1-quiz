@@ -92,6 +92,10 @@
 
   // Shared persistent UI
   const UI = {
+    // Instructions screen
+    screenInstructions: el('screen-instructions'),
+    instructionsBtn:    el('instructions-btn'),
+    // Quiz screen
     progressCurrent:   el('progress-current'),
     progressTotal:     el('progress-total'),
     scoreDisplay:      el('score-display'),
@@ -114,9 +118,10 @@
   // SCREEN MANAGEMENT
   // ================================================================
   function showScreen(name) {
-    screenQuiz.hidden        = name !== 'quiz';
-    if (UI.screenSuccess) UI.screenSuccess.hidden = name !== 'success';
-    if (UI.screenFail)    UI.screenFail.hidden    = name !== 'fail';
+    if (UI.screenInstructions) UI.screenInstructions.hidden = name !== 'instructions';
+    screenQuiz.hidden                                       = name !== 'quiz';
+    if (UI.screenSuccess) UI.screenSuccess.hidden           = name !== 'success';
+    if (UI.screenFail)    UI.screenFail.hidden              = name !== 'fail';
   }
 
   // ================================================================
@@ -382,6 +387,8 @@
 
   // ================================================================
   // RESET / TRY AGAIN
+  // Returns user to the instructions screen so they can re-read
+  // the rules before starting again. Timer does NOT restart here.
   // ================================================================
   function resetQuiz() {
     stopTimer();
@@ -391,8 +398,7 @@
     timeRemaining       = QUESTION_TIME;
     questionLocked      = false;
 
-    showScreen('quiz');
-    loadQuestion(0);
+    showScreen('instructions');
   }
 
   // ================================================================
@@ -425,31 +431,43 @@
   }
 
   // ================================================================
+  // START QUIZ
+  // Called when the user clicks [data-quiz-element="instructions-btn"].
+  // Hides instructions, shows quiz screen, loads question 1 + timer.
+  // ================================================================
+  function startQuiz() {
+    currentIndex        = 0;
+    totalScore          = 0;
+    selectedAnswerIndex = null;
+    questionLocked      = false;
+
+    showScreen('quiz');
+    loadQuestion(0);
+  }
+
+  // ================================================================
   // INIT
   // ================================================================
   function init() {
-    // Hide all non-quiz screens
-    if (UI.screenSuccess) UI.screenSuccess.hidden = true;
-    if (UI.screenFail)    UI.screenFail.hidden    = true;
-
     // Auto-stamp data-answer-index on every answer button based on DOM order
     indexAllAnswerButtons();
 
-    // Hide all questions except first (JS controls visibility)
-    showQuestion(0);
+    // Pre-hide all questions (JS controls visibility during the quiz)
+    questionEls.forEach((q) => { q.hidden = true; });
 
     // Event listeners
-    if (UI.submitBtn)    UI.submitBtn.addEventListener('click', handleSubmit);
-    if (UI.nextBtn)      UI.nextBtn.addEventListener('click', handleNext);
-    if (UI.timeoutNextBtn) UI.timeoutNextBtn.addEventListener('click', handleNext);
+    if (UI.instructionsBtn) UI.instructionsBtn.addEventListener('click', startQuiz);
+    if (UI.submitBtn)       UI.submitBtn.addEventListener('click', handleSubmit);
+    if (UI.nextBtn)         UI.nextBtn.addEventListener('click', handleNext);
+    if (UI.timeoutNextBtn)  UI.timeoutNextBtn.addEventListener('click', handleNext);
 
     els('try-again-btn').forEach((btn) => btn.addEventListener('click', resetQuiz));
 
     initAnswerDelegation();
     initEntryForm();
 
-    // Load the first question
-    loadQuestion(0);
+    // Show instructions screen on load — timer does NOT start yet
+    showScreen('instructions');
   }
 
   if (document.readyState === 'loading') {
