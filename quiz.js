@@ -5,16 +5,12 @@
   // HELPERS
   // ================================================================
 
-  // Scoped element lookup — searches within a root (default: document)
   const el  = (name, root = document) => root.querySelector(`[data-quiz-element="${name}"]`);
   const els = (name, root = document) => Array.from(root.querySelectorAll(`[data-quiz-element="${name}"]`));
 
-  // Visibility — driven by data-visibility="False|True"
-  // CSS rule already in page: [data-visibility="False"] { display: none; }
   function show(node) { if (node) node.setAttribute('data-visibility', 'True'); }
   function hide(node) { if (node) node.setAttribute('data-visibility', 'False'); }
 
-  // Button state — native disabled + data-disabled for Webflow styling
   function setDisabled(btn, disabled) {
     if (!btn) return;
     btn.disabled = !!disabled;
@@ -22,7 +18,7 @@
   }
 
   // ================================================================
-  // CONFIG (read from screen-quiz data attributes)
+  // CONFIG
   // ================================================================
 
   const screenQuiz = el('screen-quiz');
@@ -49,12 +45,10 @@
     timerBar:          el('timer-bar'),
     timerText:         el('timer-text'),
     timeoutNextBtn:    el('timeout-next-btn'),
-    // Scoped to timeout overlay — avoids clashing with answer option buttons
     timeoutAnswerSpan: el('answer', timeoutOverlay),
   };
 
-  // Submit + Next buttons live inside each question block.
-  // Always look them up from the current question so Q2, Q3 etc. work correctly.
+  // Submit + Next live inside each question — always look up from current question
   function getSubmitBtn() { return el('submit-btn', currentQ()); }
   function getNextBtn()   { return el('next-btn',   currentQ()); }
 
@@ -64,49 +58,88 @@
 
   const questionEls     = els('question');
   const TOTAL_QUESTIONS = questionEls.length;
-
   if (!TOTAL_QUESTIONS) { console.warn('[Quiz] No questions found. Aborting.'); return; }
+
+  // ================================================================
+  // CORRECT ANSWER STORE
+  // Correct answer elements are read from data-correct="true" once at
+  // init, then that attribute is immediately stripped from the DOM so
+  // it is never inspectable. Identity is tracked by element reference.
+  // ================================================================
+
+  const correctEls = []; // correctEls[questionIndex] = the correct answer DOM element
+
+  function prepareAllQuestions() {
+    questionEls.forEach((qEl, index) => {
+      const answerBtns = getAnswerBtns(qEl);
+      const correctEl  = answerBtns.find(b => b.getAttribute('data-correct') === 'true')
+                         || answerBtns[0]; // fallback: first answer if none marked
+      correctEls[index] = correctEl;
+
+      // Strip data-correct from every answer — never visible in DOM until reveal
+      answerBtns.forEach(b => b.removeAttribute('data-correct'));
+    });
+  }
 
   // ================================================================
   // STATE
   // ================================================================
 
-  let currentIndex   = 0;
-  let selectedIndex  = null;
-  let locked         = false;
-  let totalScore     = 0;
-  let timeRemaining  = QUESTION_TIME;
-  let timerId        = null;
+  let currentIndex  = 0;
+  let selectedEl    = null; // the selected answer DOM element (not an index)
+  let locked        = false;
+  let totalScore    = 0;
+  let timeRemaining = QUESTION_TIME;
+  let timerId       = null;
 
   // ================================================================
   // QUESTION HELPERS
   // ================================================================
 
-  function currentQ() {
-    return questionEls[currentIndex] || null;
+  function currentQ() { return questionEls[currentIndex] || null; }
+
+  function getAnswerBtns(qEl) { return els('answer', qEl); }
+
+  function getCorrectEl() { return correctEls[currentIndex] || null; }
+
+  function getCorrectText() {
+    const c = getCorrectEl();
+    return c ? c.textContent.trim() : '';
   }
 
-  // Answer buttons scoped to a specific question — avoids the
-  // timeout overlay's [data-quiz-element="answer"] span
-  function getAnswerBtns(qEl) {
-    return els('answer', qEl);
-  }
+  // ================================================================
+  // SHUFFLE
+  // Fisher-Yates shuffle of answer DOM nodes within their parent.
+  // Re-stamps data-answer-index after shuffle.
+  // Called on every question load so order changes each attempt.
+  // ================================================================
 
-  function getCorrectIndex(qEl) {
-    return parseInt(qEl.dataset.correctAnswer ?? '0', 10);
-  }
+  function shuffleAnswers(qEl) {
+    const btns = getAnswerBtns(qEl);
+    if (btns.length < 2) return;
+    const parent = btns[0].parentElement;
+    if (!parent) return;
 
-  function getCorrectText(qEl) {
-    const idx = getCorrectIndex(qEl);
-    const btn = getAnswerBtns(qEl).find(
-      b => parseInt(b.getAttribute('data-answer-index'), 10) === idx
-    );
-    return btn ? btn.textContent.trim() : '';
+    // Fisher-Yates
+    for (let i = btns.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      if (i !== j) {
+        const nodeI = btns[i];
+        const nodeJ = btns[j];
+        const afterI = nodeI.nextSibling;
+        parent.insertBefore(nodeI, nodeJ);
+        parent.insertBefore(nodeJ, afterI);
+        // Keep array in sync
+        [btns[i], btns[j]] = [btns[j], btns[i]];
+      }
+    }
+
+    // Re-stamp indexes to reflect new DOM order
+    getAnswerBtns(qEl).forEach((btn, i) => btn.setAttribute('data-answer-index', String(i)));
   }
 
   // ================================================================
   // BASELINE VISIBILITY
-  // Sets the correct starting state for all screens on page load.
   // ================================================================
 
   function setBaseline() {
@@ -114,22 +147,8 @@
     hide(screenQuiz);
     hide(screenResults);
     hide(timeoutOverlay);
-    hide(timerWrap);             // timer hidden until quiz starts
+    hide(timerWrap);
     questionEls.forEach(q => hide(q));
-  }
-
-  // ================================================================
-  // AUTO-INDEX ANSWER BUTTONS
-  // Stamps data-answer-index based on DOM order so Webflow authors
-  // don't have to set it manually.
-  // ================================================================
-
-  function indexAnswers() {
-    questionEls.forEach(qEl => {
-      getAnswerBtns(qEl).forEach((btn, i) => {
-        btn.setAttribute('data-answer-index', String(i));
-      });
-    });
   }
 
   // ================================================================
@@ -140,10 +159,10 @@
     clearInterval(timerId);
     timerId = null;
 
-    // Freeze the bar exactly where it is mid-animation
+    // Freeze bar at current position mid-animation
     if (UI.timerBar) {
-      const currentW  = parseFloat(getComputedStyle(UI.timerBar).width);
-      const parentW   = UI.timerBar.parentElement?.offsetWidth || 1;
+      const currentW = parseFloat(getComputedStyle(UI.timerBar).width);
+      const parentW  = UI.timerBar.parentElement?.offsetWidth || 1;
       UI.timerBar.style.transition = 'none';
       UI.timerBar.style.width      = (currentW / parentW * 100).toFixed(3) + '%';
     }
@@ -154,30 +173,20 @@
     timeRemaining = QUESTION_TIME;
 
     if (UI.timerBar) {
-      // 1. Snap to 100% with no transition
       UI.timerBar.style.transition = 'none';
       UI.timerBar.style.width      = '100%';
-      // 2. Force reflow so the browser registers the 100% before animating
-      UI.timerBar.getBoundingClientRect();
-      // 3. One single transition from 100% → 0% over the full question time
-      //    CSS handles all the smoothness — JS never touches width again
+      UI.timerBar.getBoundingClientRect(); // force reflow
       UI.timerBar.style.transition = `width ${QUESTION_TIME}s linear`;
       UI.timerBar.style.width      = '0%';
     }
-
     if (UI.timerText) UI.timerText.textContent = String(QUESTION_TIME);
     if (timerWrap)    timerWrap.setAttribute('data-warning', 'false');
 
-    // setInterval only drives the text counter + warning state
     timerId = setInterval(() => {
       timeRemaining -= 1;
       if (UI.timerText) UI.timerText.textContent = String(Math.max(0, timeRemaining));
       if (timerWrap)    timerWrap.setAttribute('data-warning', timeRemaining <= 5 ? 'true' : 'false');
-
-      if (timeRemaining <= 0) {
-        stopTimer();
-        onTimeout();
-      }
+      if (timeRemaining <= 0) { stopTimer(); onTimeout(); }
     }, 1000);
   }
 
@@ -186,21 +195,18 @@
   // ================================================================
 
   function resetQuestion(qEl) {
-    // Clear all answer button state
     getAnswerBtns(qEl).forEach(btn => {
       btn.setAttribute('data-selected', 'false');
       btn.setAttribute('data-locked',   'false');
       btn.removeAttribute('data-correct');
     });
 
-    // Hide feedback block
-    const feedbackWrap   = el('feedback-msg', qEl);
+    const feedbackWrap   = el('feedback-msg',    qEl);
     const feedbackAnswer = el('feedback-answer', qEl);
     if (feedbackWrap)   feedbackWrap.setAttribute('data-disabled', 'true');
     if (feedbackWrap)   feedbackWrap.removeAttribute('data-feedback-correct');
     if (feedbackAnswer) feedbackAnswer.textContent = '';
 
-    // Reset hint
     const hintText = el('hint-text', qEl);
     if (hintText) hintText.hidden = true;
   }
@@ -216,15 +222,16 @@
   }
 
   function loadQuestion(index) {
-    currentIndex  = index;
-    selectedIndex = null;
-    locked        = false;
+    currentIndex = index;
+    selectedEl   = null;
+    locked       = false;
 
     const qEl = currentQ();
     if (!qEl) return;
 
     hide(timeoutOverlay);
-    resetQuestion(qEl);
+    shuffleAnswers(qEl);   // shuffle first — new order each load
+    resetQuestion(qEl);    // then reset state on the (now shuffled) buttons
     showOnlyQuestion(index);
     updateProgress();
     setDisabled(getSubmitBtn(), true);
@@ -235,14 +242,12 @@
 
   // ================================================================
   // HINT
-  // Re-binds per question to avoid stale listeners on retry.
   // ================================================================
 
   function initHint(qEl) {
     const hintBtn  = el('hint-btn',  qEl);
     const hintText = el('hint-text', qEl);
     if (!hintBtn || !hintText) return;
-
     const fresh = hintBtn.cloneNode(true);
     hintBtn.parentNode.replaceChild(fresh, hintBtn);
     fresh.addEventListener('click', () => { hintText.hidden = !hintText.hidden; });
@@ -250,31 +255,29 @@
 
   // ================================================================
   // ANSWER SELECTION
+  // Tracks the selected element directly — index-independent,
+  // so shuffling never breaks correctness checking.
   // ================================================================
 
-  function selectAnswer(index) {
-    selectedIndex = index;
+  function selectAnswer(btn) {
+    selectedEl = btn;
     const qEl = currentQ();
     if (!qEl) return;
-
-    getAnswerBtns(qEl).forEach(btn => {
-      const i = parseInt(btn.getAttribute('data-answer-index'), 10);
-      btn.setAttribute('data-selected', i === index ? 'true' : 'false');
+    getAnswerBtns(qEl).forEach(b => {
+      b.setAttribute('data-selected', b === btn ? 'true' : 'false');
     });
-
     setDisabled(getSubmitBtn(), false);
   }
 
   // ================================================================
-  // REVEAL ANSWERS (used by both submit and timeout)
+  // REVEAL ANSWERS
   // ================================================================
 
   function revealAnswers(qEl) {
-    const correctIdx = getCorrectIndex(qEl);
+    const correctEl = getCorrectEl();
     getAnswerBtns(qEl).forEach(btn => {
-      const i = parseInt(btn.getAttribute('data-answer-index'), 10);
       btn.setAttribute('data-locked',  'true');
-      btn.setAttribute('data-correct', i === correctIdx ? 'true' : 'false');
+      btn.setAttribute('data-correct', btn === correctEl ? 'true' : 'false');
     });
   }
 
@@ -283,37 +286,32 @@
   // ================================================================
 
   function onSubmit() {
-    if (locked || selectedIndex === null) return;
+    if (locked || !selectedEl) return;
     stopTimer();
     locked = true;
 
-    const qEl        = currentQ();
+    const qEl       = currentQ();
     if (!qEl) return;
 
-    const correctIdx = getCorrectIndex(qEl);
-    const isCorrect  = selectedIndex === correctIdx;
-
+    const isCorrect = selectedEl === getCorrectEl();
     revealAnswers(qEl);
 
-    // Score
     const points = isCorrect ? Math.max(0, timeRemaining) : 0;
     if (isCorrect) {
       totalScore += points;
       if (UI.scoreDisplay) UI.scoreDisplay.textContent = String(totalScore);
     }
 
-    // Feedback
     const feedbackWrap   = el('feedback-msg',    qEl);
     const feedbackAnswer = el('feedback-answer', qEl);
-
     if (feedbackWrap) {
-      feedbackWrap.setAttribute('data-disabled',        'false');
-      feedbackWrap.setAttribute('data-feedback-correct', isCorrect ? 'true' : 'false');
+      feedbackWrap.setAttribute('data-disabled',         'false');
+      feedbackWrap.setAttribute('data-feedback-correct',  isCorrect ? 'true' : 'false');
     }
     if (feedbackAnswer) {
       feedbackAnswer.textContent = isCorrect
         ? `Correct! +${points} points`
-        : `Not quite. The correct answer is ${getCorrectText(qEl)}`;
+        : `Not quite. The correct answer is ${getCorrectText()}`;
     }
 
     setDisabled(getSubmitBtn(), true);
@@ -326,39 +324,25 @@
 
   function onTimeout() {
     locked = true;
-
     const qEl = currentQ();
     if (!qEl) return;
 
     revealAnswers(qEl);
-
-    // Populate the timeout overlay's correct-answer span
-    if (UI.timeoutAnswerSpan) {
-      UI.timeoutAnswerSpan.textContent = getCorrectText(qEl);
-    }
-
+    if (UI.timeoutAnswerSpan) UI.timeoutAnswerSpan.textContent = getCorrectText();
     setDisabled(getSubmitBtn(), true);
     setDisabled(getNextBtn(),   true);
     show(timeoutOverlay);
   }
 
   // ================================================================
-  // NEXT QUESTION
+  // NEXT / END
   // ================================================================
 
   function goNext() {
     hide(timeoutOverlay);
     const next = currentIndex + 1;
-    if (next >= TOTAL_QUESTIONS) {
-      endQuiz();
-    } else {
-      loadQuestion(next);
-    }
+    if (next >= TOTAL_QUESTIONS) { endQuiz(); } else { loadQuestion(next); }
   }
-
-  // ================================================================
-  // END QUIZ
-  // ================================================================
 
   function endQuiz() {
     stopTimer();
@@ -371,13 +355,12 @@
 
   // ================================================================
   // RESET / TRY AGAIN
-  // Returns to instructions screen. Timer does not restart.
   // ================================================================
 
   function resetQuiz() {
     stopTimer();
     currentIndex  = 0;
-    selectedIndex = null;
+    selectedEl    = null;
     locked        = false;
     totalScore    = 0;
     timeRemaining = QUESTION_TIME;
@@ -388,12 +371,9 @@
     hide(timerWrap);
     questionEls.forEach(q => hide(q));
 
-    if (timerWrap) timerWrap.setAttribute('data-warning', 'false');
+    if (timerWrap)    timerWrap.setAttribute('data-warning', 'false');
     if (UI.timerText) UI.timerText.textContent = String(QUESTION_TIME);
-    if (UI.timerBar) {
-      UI.timerBar.style.transition = 'none';
-      UI.timerBar.style.width      = '100%';
-    }
+    if (UI.timerBar)  { UI.timerBar.style.transition = 'none'; UI.timerBar.style.width = '100%'; }
 
     show(screenInstructions);
   }
@@ -403,51 +383,42 @@
   // ================================================================
 
   function startQuiz() {
-    totalScore    = 0;
-    currentIndex  = 0;
-    selectedIndex = null;
-    locked        = false;
+    totalScore   = 0;
+    currentIndex = 0;
+    selectedEl   = null;
+    locked       = false;
 
     hide(screenInstructions);
     show(screenQuiz);
     show(timerWrap);
-
     if (UI.scoreDisplay) UI.scoreDisplay.textContent = '0';
     loadQuestion(0);
   }
 
   // ================================================================
-  // ANSWER CLICK DELEGATION
-  // Delegated to screenQuiz — scoped to current question only
-  // to avoid the timeout overlay's [data-quiz-element="answer"] span.
+  // CLICK DELEGATION
+  // One listener handles answers, submit and next for all questions.
   // ================================================================
 
   function bindQuizClicks() {
-    // Single delegated listener handles answers, submit and next
-    // — works for every question without rebinding
     screenQuiz.addEventListener('click', e => {
       const qEl = currentQ();
 
-      // Submit
       if (e.target.closest('[data-quiz-element="submit-btn"]')) {
         onSubmit();
         return;
       }
 
-      // Next
       if (e.target.closest('[data-quiz-element="next-btn"]')) {
         const nextBtn = getNextBtn();
         if (nextBtn && !nextBtn.disabled) goNext();
         return;
       }
 
-      // Answer selection
       if (locked) return;
       const btn = e.target.closest('[data-quiz-element="answer"]');
-      if (!btn) return;
-      if (!qEl || !qEl.contains(btn)) return; // guard against timeout overlay span
-      const idx = parseInt(btn.getAttribute('data-answer-index'), 10);
-      if (!isNaN(idx)) selectAnswer(idx);
+      if (!btn || !qEl || !qEl.contains(btn)) return;
+      selectAnswer(btn); // pass element — no index needed
     });
   }
 
@@ -456,7 +427,7 @@
   // ================================================================
 
   function init() {
-    indexAnswers();
+    prepareAllQuestions(); // read + strip data-correct before anything is visible
     setBaseline();
     bindQuizClicks();
 
