@@ -253,19 +253,15 @@
     const hintText = el('hint-text', qEl);
     if (!hintBtn || !hintText) return;
 
-    hintText.style.display = 'none';
+    hintText.removeAttribute('hidden');   // strip hidden="" from Webflow HTML
+    hintText.style.display = 'none';      // hide via inline style instead
     let hintVisible = false;
 
     const fresh = hintBtn.cloneNode(true);
     hintBtn.parentNode.replaceChild(fresh, hintBtn);
     fresh.addEventListener('click', () => {
       hintVisible = !hintVisible;
-      if (hintVisible) {
-        hintText.removeAttribute('hidden');
-        hintText.style.display = 'block';
-      } else {
-        hintText.style.display = 'none';
-      }
+      hintText.style.display = hintVisible ? 'block' : 'none';
     });
   }
 
