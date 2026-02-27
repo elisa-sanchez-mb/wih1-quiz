@@ -252,11 +252,16 @@
     const hintBtn  = el('hint-btn',  qEl);
     const hintText = el('hint-text', qEl);
     if (!hintBtn || !hintText) return;
+
+    // Always start hidden — don't trust whatever Webflow set
+    hide(hintText);
+    let hintVisible = false;
+
     const fresh = hintBtn.cloneNode(true);
     hintBtn.parentNode.replaceChild(fresh, hintBtn);
     fresh.addEventListener('click', () => {
-      const isVisible = hintText.getAttribute('data-visibility') === 'True';
-      isVisible ? hide(hintText) : show(hintText);
+      hintVisible = !hintVisible;
+      hintVisible ? show(hintText) : hide(hintText);
     });
   }
 
