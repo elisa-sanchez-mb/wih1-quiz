@@ -36,6 +36,7 @@
   const timerWrap          = document.querySelector('.wih1-timer_wrap');
   const instructionsBtn    = el('instructions-btn');
   const restartBtn         = el('restart-btn');
+  const instructionsCard   = document.querySelector('.wih1-instructions_card');
 
   const UI = {
     progressCurrent:   el('progress-current'),
@@ -143,12 +144,38 @@
   }
 
   // ================================================================
+  // INSTRUCTIONS ANIMATION
+  // ================================================================
+
+  function injectStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes wih1-slide-up-fade {
+        from { opacity: 0; transform: translateY(20px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .wih1-instructions-animate {
+        animation: wih1-slide-up-fade 0.5s ease-out both;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function animateInstructionsCard() {
+    if (!instructionsCard) return;
+    instructionsCard.classList.remove('wih1-instructions-animate');
+    void instructionsCard.offsetWidth; // force reflow so animation replays
+    instructionsCard.classList.add('wih1-instructions-animate');
+  }
+
+  // ================================================================
   // BASELINE VISIBILITY
   // ================================================================
 
   function setBaseline() {
     show(screenQuiz);          // quiz visible on page load
     show(screenInstructions);  // instructions overlay sits on top
+    animateInstructionsCard();
     hide(screenResults);
     hide(timeoutOverlay);
     hide(timerWrap);           // timer hidden until Start is clicked
@@ -389,6 +416,7 @@
 
     show(screenQuiz);
     show(screenInstructions);  // instructions back on top
+    animateInstructionsCard();
     loadQuestion(0, false);    // reload Q1 behind instructions, no timer
   }
 
@@ -439,6 +467,7 @@
   // ================================================================
 
   function init() {
+    injectStyles();
     prepareAllQuestions(); // read + strip data-correct before anything is visible
     setBaseline();
     bindQuizClicks();
