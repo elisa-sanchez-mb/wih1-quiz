@@ -36,7 +36,6 @@
   const timerWrap          = document.querySelector('.wih1-timer_wrap');
   const instructionsBtn    = el('instructions-btn');
   const restartBtn         = el('restart-btn');
-  const instructionsCard   = document.querySelector('.wih1-instructions_card');
 
   const UI = {
     progressCurrent:   el('progress-current'),
@@ -98,6 +97,21 @@
   let timerId       = null;
 
   // ================================================================
+  // COUNT-UP ANIMATION
+  // ================================================================
+
+  function countUp(el, from, to, duration) {
+    if (!el) return;
+    const start = performance.now();
+    (function step(now) {
+      const t      = Math.min((now - start) / duration, 1);
+      const eased  = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      el.textContent = String(Math.round(from + (to - from) * eased));
+      if (t < 1) requestAnimationFrame(step);
+    })(start);
+  }
+
+  // ================================================================
   // QUESTION HELPERS
   // ================================================================
 
@@ -144,33 +158,12 @@
   }
 
   // ================================================================
-  // INSTRUCTIONS ANIMATION
-  // ================================================================
-
-  let _cardAnim = null;
-
-  function animateInstructionsCard(delay) {
-    if (!instructionsCard) return;
-    if (_cardAnim) { _cardAnim.cancel(); _cardAnim = null; }
-    setTimeout(() => {
-      _cardAnim = instructionsCard.animate(
-        [
-          { opacity: '0', transform: 'translateY(20px)' },
-          { opacity: '1', transform: 'translateY(0)'   }
-        ],
-        { duration: 500, easing: 'ease-out', fill: 'forwards' }
-      );
-    }, delay || 0);
-  }
-
-  // ================================================================
   // BASELINE VISIBILITY
   // ================================================================
 
   function setBaseline() {
     show(screenQuiz);          // quiz visible on page load
     show(screenInstructions);  // instructions overlay sits on top
-    animateInstructionsCard(100); // 100ms delay lets the browser paint the page first
     hide(screenResults);
     hide(timeoutOverlay);
     hide(timerWrap);           // timer hidden until Start is clicked
@@ -333,8 +326,9 @@
 
     const points = isCorrect ? Math.max(0, timeRemaining) : 0;
     if (isCorrect) {
+      const prevScore = totalScore;
       totalScore += points;
-      if (UI.scoreDisplay) UI.scoreDisplay.textContent = String(totalScore);
+      countUp(UI.scoreDisplay, prevScore, totalScore, 600);
     }
 
     const feedbackWrap   = el('feedback-msg',    qEl);
@@ -411,7 +405,6 @@
 
     show(screenQuiz);
     show(screenInstructions);  // instructions back on top
-    animateInstructionsCard();
     loadQuestion(0, false);    // reload Q1 behind instructions, no timer
   }
 
