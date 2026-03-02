@@ -147,25 +147,20 @@
   // INSTRUCTIONS ANIMATION
   // ================================================================
 
-  function injectStyles() {
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes wih1-slide-up-fade {
-        from { opacity: 0; transform: translateY(20px); }
-        to   { opacity: 1; transform: translateY(0); }
-      }
-      .wih1-instructions-animate {
-        animation: wih1-slide-up-fade 0.5s ease-out both;
-      }
-    `;
-    document.head.appendChild(style);
-  }
+  let _cardAnim = null;
 
-  function animateInstructionsCard() {
+  function animateInstructionsCard(delay) {
     if (!instructionsCard) return;
-    instructionsCard.classList.remove('wih1-instructions-animate');
-    void instructionsCard.offsetWidth; // force reflow so animation replays
-    instructionsCard.classList.add('wih1-instructions-animate');
+    if (_cardAnim) { _cardAnim.cancel(); _cardAnim = null; }
+    setTimeout(() => {
+      _cardAnim = instructionsCard.animate(
+        [
+          { opacity: '0', transform: 'translateY(20px)' },
+          { opacity: '1', transform: 'translateY(0)'   }
+        ],
+        { duration: 500, easing: 'ease-out', fill: 'forwards' }
+      );
+    }, delay || 0);
   }
 
   // ================================================================
@@ -175,7 +170,7 @@
   function setBaseline() {
     show(screenQuiz);          // quiz visible on page load
     show(screenInstructions);  // instructions overlay sits on top
-    animateInstructionsCard();
+    animateInstructionsCard(100); // 100ms delay lets the browser paint the page first
     hide(screenResults);
     hide(timeoutOverlay);
     hide(timerWrap);           // timer hidden until Start is clicked
@@ -467,7 +462,6 @@
   // ================================================================
 
   function init() {
-    injectStyles();
     prepareAllQuestions(); // read + strip data-correct before anything is visible
     setBaseline();
     bindQuizClicks();
