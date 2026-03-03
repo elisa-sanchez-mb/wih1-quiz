@@ -217,9 +217,7 @@
 
     if (UI.timerBar) {
       if (refill) {
-        // Animate bar from empty back to full, then begin countdown
-        UI.timerBar.style.transition = 'none';
-        UI.timerBar.style.width      = '0%';
+        // Bar is frozen at wherever it stopped — animate from there back to full
         UI.timerBar.getBoundingClientRect(); // force reflow
         UI.timerBar.style.transition = `width ${REFILL_MS}ms ease-out`;
         UI.timerBar.style.width      = '100%';
