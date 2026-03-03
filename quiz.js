@@ -459,7 +459,42 @@
   // INIT
   // ================================================================
 
+  // ================================================================
+  // TRANSITIONS
+  // Inject a <style> block so Webflow's data-attribute-driven states
+  // animate smoothly without touching the Designer.
+  // ================================================================
+
+  function injectTransitionStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+      .wih1-answer_wrap {
+        transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, opacity 0.25s ease, transform 0.2s ease;
+      }
+      .wih1-answer_wrap:hover:not([data-locked="true"]) {
+        transform: translateY(-1px);
+      }
+      .wih1-answer_wrap:active:not([data-locked="true"]) {
+        transform: translateY(0px);
+        transition-duration: 0.1s;
+      }
+      .wih1-answer_icon-inner,
+      .wih1-answer_icon-outer {
+        transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+      }
+      .wih1-answer_icon-incorrect,
+      .wih1-answer_icon-correct {
+        transition: opacity 0.2s ease;
+      }
+      .wih1-radio_text {
+        transition: color 0.25s ease;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function init() {
+    injectTransitionStyles();
     prepareAllQuestions(); // read + strip data-correct before anything is visible
     setBaseline();
     bindQuizClicks();
