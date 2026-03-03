@@ -96,6 +96,7 @@
   let totalScore    = 0;
   let timeRemaining = QUESTION_TIME;
   let timerId       = null;
+  let refillTimerId = null;
 
   // ================================================================
   // COUNT-UP ANIMATION
@@ -182,6 +183,11 @@
     clearInterval(timerId);
     timerId = null;
 
+    if (refillTimerId !== null) {
+      clearTimeout(refillTimerId);
+      refillTimerId = null;
+    }
+
     // Freeze bar at current position mid-animation
     if (UI.timerBar) {
       const currentW = parseFloat(getComputedStyle(UI.timerBar).width);
@@ -191,26 +197,54 @@
     }
   }
 
-  function startTimer() {
-    stopTimer();
-    timeRemaining = QUESTION_TIME;
+  const REFILL_MS = 400;
 
-    if (UI.timerBar) {
-      UI.timerBar.style.transition = 'none';
-      UI.timerBar.style.width      = '100%';
-      UI.timerBar.getBoundingClientRect(); // force reflow
-      UI.timerBar.style.transition = `width ${QUESTION_TIME}s linear`;
-      UI.timerBar.style.width      = '0%';
-    }
-    if (UI.timerText) UI.timerText.textContent = String(QUESTION_TIME);
-    if (timerWrap)    timerWrap.setAttribute('data-warning', 'false');
-
+  function beginInterval() {
     timerId = setInterval(() => {
       timeRemaining -= 1;
       if (UI.timerText) UI.timerText.textContent = String(Math.max(0, timeRemaining));
       if (timerWrap)    timerWrap.setAttribute('data-warning', timeRemaining <= 5 ? 'true' : 'false');
       if (timeRemaining <= 0) { stopTimer(); onTimeout(); }
     }, 1000);
+  }
+
+  function startTimer(refill = false) {
+    stopTimer();
+    timeRemaining = QUESTION_TIME;
+
+    if (UI.timerText) UI.timerText.textContent = String(QUESTION_TIME);
+    if (timerWrap)    timerWrap.setAttribute('data-warning', 'false');
+
+    if (UI.timerBar) {
+      if (refill) {
+        // Animate bar from empty back to full, then begin countdown
+        UI.timerBar.style.transition = 'none';
+        UI.timerBar.style.width      = '0%';
+        UI.timerBar.getBoundingClientRect(); // force reflow
+        UI.timerBar.style.transition = `width ${REFILL_MS}ms ease-out`;
+        UI.timerBar.style.width      = '100%';
+
+        refillTimerId = setTimeout(() => {
+          refillTimerId = null;
+          if (!UI.timerBar) return;
+          UI.timerBar.style.transition = 'none';
+          UI.timerBar.style.width      = '100%';
+          UI.timerBar.getBoundingClientRect();
+          UI.timerBar.style.transition = `width ${QUESTION_TIME}s linear`;
+          UI.timerBar.style.width      = '0%';
+          beginInterval();
+        }, REFILL_MS);
+      } else {
+        UI.timerBar.style.transition = 'none';
+        UI.timerBar.style.width      = '100%';
+        UI.timerBar.getBoundingClientRect(); // force reflow
+        UI.timerBar.style.transition = `width ${QUESTION_TIME}s linear`;
+        UI.timerBar.style.width      = '0%';
+        beginInterval();
+      }
+    } else {
+      beginInterval();
+    }
   }
 
   // ================================================================
@@ -260,7 +294,7 @@
     setDisabled(getSubmitBtn(), true);
     setDisabled(getNextBtn(),   true);
     initHint(qEl);
-    if (withTimer) startTimer();
+    if (withTimer) startTimer(index > 0);
   }
 
   // ================================================================
