@@ -257,12 +257,11 @@
       btn.setAttribute('data-locked',   'false');
       btn.removeAttribute('data-correct');
     });
-    const feedbackOuter = el('feedback-icon-outer', qEl);
-if (feedbackOuter) {
-  feedbackOuter.style.animation = 'none';
-  feedbackOuter.getBoundingClientRect(); // force reflow
-  feedbackOuter.style.animation = '';
-}
+    const icons = qEl.querySelectorAll(
+  '.wih1-feedback_icon-outer, .wih1-feedback_icon-mid, .wih1-feedback_icon-inner'
+);
+icons.forEach(icon => icon.classList.remove('is-animating'));
+    
     const feedbackWrap   = el('feedback-msg',    qEl);
     const feedbackAnswer = el('feedback-answer', qEl);
     if (feedbackWrap)   feedbackWrap.setAttribute('data-disabled', 'true');
@@ -397,9 +396,16 @@ if (feedbackOuter) {
         ? `Correct! +${points} points`
         : `Not quite. The correct answer is ${getCorrectText()}`;
     }
+    const icons = qEl.querySelectorAll(
+  '.wih1-feedback_icon-outer, .wih1-feedback_icon-mid, .wih1-feedback_icon-inner'
+);
+icons.forEach(icon => icon.classList.remove('is-animating'));
+void qEl.offsetWidth; // force reflow
+icons.forEach(icon => icon.classList.add('is-animating'));
 
     setDisabled(getSubmitBtn(), true);
     setDisabled(getNextBtn(),   false);
+    
   }
 
   // ================================================================
@@ -549,8 +555,24 @@ if (feedbackOuter) {
       .wih1-timer_wrap[data-critical="true"] [data-quiz-element="timer-bar"] {
         background-color: #F15A22;
       }
-        .wih1-feedback_icon-outer {
+        /* Base state — hidden until animated */
+.wih1-feedback_icon-outer,
+.wih1-feedback_icon-mid,
+.wih1-feedback_icon-inner {
+  transform: scale(0.8);
+  opacity: 0;
+}
+
+.wih1-feedback_icon-outer.is-animating {
   animation: feedback-pulse 1.2s ease-out forwards;
+}
+.wih1-feedback_icon-mid.is-animating {
+  animation: feedback-pulse-mid 1.2s ease-out forwards;
+  animation-delay: 0.05s;
+}
+.wih1-feedback_icon-inner.is-animating {
+  animation: feedback-pulse-mid 1.2s ease-out forwards;
+  animation-delay: 0.1s;
 }
 
 @keyframes feedback-pulse {
@@ -560,21 +582,10 @@ if (feedbackOuter) {
   80%  { transform: scale(1.05); }
   100% { transform: scale(1); opacity: 1; }
 }
-
-.wih1-feedback_icon-mid {
-  animation: feedback-pulse-mid 1.2s ease-out forwards;
-  animation-delay: 0.05s;
-}
-
-.wih1-feedback_icon-inner {
-  animation: feedback-pulse-mid 1.2s ease-out forwards;
-  animation-delay: 0.1s;
-}
-
 @keyframes feedback-pulse-mid {
   0%   { transform: scale(0.7); opacity: 0; }
   50%  { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1);   opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
     `;
     document.head.appendChild(style);
