@@ -257,7 +257,12 @@
       btn.setAttribute('data-locked',   'false');
       btn.removeAttribute('data-correct');
     });
-
+    const feedbackOuter = el('feedback-icon-outer', qEl);
+if (feedbackOuter) {
+  feedbackOuter.style.animation = 'none';
+  feedbackOuter.getBoundingClientRect(); // force reflow
+  feedbackOuter.style.animation = '';
+}
     const feedbackWrap   = el('feedback-msg',    qEl);
     const feedbackAnswer = el('feedback-answer', qEl);
     if (feedbackWrap)   feedbackWrap.setAttribute('data-disabled', 'true');
@@ -544,6 +549,33 @@
       .wih1-timer_wrap[data-critical="true"] [data-quiz-element="timer-bar"] {
         background-color: #F15A22;
       }
+        .wih1-feedback_icon-outer {
+  animation: feedback-pulse 1.2s ease-out forwards;
+}
+
+@keyframes feedback-pulse {
+  0%   { transform: scale(0.8); opacity: 0; }
+  40%  { transform: scale(1.15); opacity: 1; }
+  60%  { transform: scale(0.95); }
+  80%  { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.wih1-feedback_icon-mid {
+  animation: feedback-pulse-mid 1.2s ease-out forwards;
+  animation-delay: 0.05s;
+}
+
+.wih1-feedback_icon-inner {
+  animation: feedback-pulse-mid 1.2s ease-out forwards;
+  animation-delay: 0.1s;
+}
+
+@keyframes feedback-pulse-mid {
+  0%   { transform: scale(0.7); opacity: 0; }
+  50%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
     `;
     document.head.appendChild(style);
   }
