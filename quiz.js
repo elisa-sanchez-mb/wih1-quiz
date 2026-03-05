@@ -354,17 +354,22 @@
   }
 
   function onStartGame() {
+    const card = screenInstructions && screenInstructions.querySelector('.wih1-instructions_card');
+    if (card) {
+      card.style.opacity         = '0';
+      card.style.transform       = 'translateY(30%)';
+      card.style.transition      = 'none';
+      card.style.transitionDelay = '0s';
+    }
     hide(screenSplash);
     show(screenQuiz);
     show(screenInstructions);
-    restartAnimation(screenInstructions);
-  }
-
-  function restartAnimation(node) {
-    if (!node) return;
-    node.style.animation = 'none';
-    node.getBoundingClientRect(); // force reflow
-    node.style.animation = '';
+    screenInstructions.getBoundingClientRect(); // force reflow
+    if (card) {
+      card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      card.style.opacity    = '1';
+      card.style.transform  = 'translateY(0)';
+    }
   }
 
   // ── Click delegation ──────────────────────────────────────────────
