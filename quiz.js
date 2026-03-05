@@ -20,11 +20,13 @@
   const QUESTION_TIME = parseInt(screenQuiz.dataset.quizQuestionTime, 10) || 15;
 
   // ── Elements ──────────────────────────────────────────────────────
+  const screenSplash       = el('splash');
   const screenInstructions = el('screen-instructions');
   const screenResults      = el('results');
   const timeoutOverlay     = el('timeout-overlay');
   const timerWrap          = document.querySelector('.wih1-timer_wrap');
   const instructionsBtn    = el('instructions-btn');
+  const startGameBtn       = el('start-game-button');
   const restartBtn         = el('restart-btn');
   const resultsWrap        = document.querySelector('.wih1-results_wrap');
 
@@ -67,10 +69,10 @@
   let refillTimerId = null;
 
   // ── Helpers ───────────────────────────────────────────────────────
-  const currentQ      = ()    => questionEls[currentIndex] || null;
-  const getAnswerBtns = (qEl) => els('answer', qEl);
-  const getCorrectEl  = ()    => correctEls[currentIndex] || null;
-  const getCorrectText = ()   => { const c = getCorrectEl(); return c ? c.textContent.trim() : ''; };
+  const currentQ       = ()    => questionEls[currentIndex] || null;
+  const getAnswerBtns  = (qEl) => els('answer', qEl);
+  const getCorrectEl   = ()    => correctEls[currentIndex] || null;
+  const getCorrectText = ()    => { const c = getCorrectEl(); return c ? c.textContent.trim() : ''; };
 
   // ── Count-up ──────────────────────────────────────────────────────
   function countUp(el, from, to, duration) {
@@ -138,10 +140,9 @@
     stopTimer();
     timeRemaining = QUESTION_TIME;
     if (UI.timerText) UI.timerText.textContent = String(QUESTION_TIME);
-    if (timerWrap)    timerWrap.setAttribute('data-warning', 'false');
+    if (timerWrap)    timerWrap.setAttribute('data-warning',  'false');
     if (timerWrap)    timerWrap.setAttribute('data-critical', 'false');
     if (refill && UI.timerBar) {
-      // Animate bar back to full, then start countdown
       UI.timerBar.getBoundingClientRect();
       UI.timerBar.style.transition = `width ${REFILL_MS}ms ease-out`;
       UI.timerBar.style.width = '100%';
@@ -252,8 +253,8 @@
     const feedbackWrap   = el('feedback-msg',    qEl);
     const feedbackAnswer = el('feedback-answer', qEl);
     if (feedbackWrap) {
-      feedbackWrap.setAttribute('data-disabled',         'false');
-      feedbackWrap.setAttribute('data-feedback-correct',  isCorrect ? 'true' : 'false');
+      feedbackWrap.setAttribute('data-disabled',        'false');
+      feedbackWrap.setAttribute('data-feedback-correct', isCorrect ? 'true' : 'false');
     }
     if (feedbackAnswer) {
       feedbackAnswer.textContent = isCorrect
@@ -305,7 +306,7 @@
     hide(timeoutOverlay);
     hide(timerWrap);
 
-    if (timerWrap)       timerWrap.setAttribute('data-warning', 'false');
+    if (timerWrap)       timerWrap.setAttribute('data-warning',  'false');
     if (timerWrap)       timerWrap.setAttribute('data-critical', 'false');
     if (UI.timerText)    UI.timerText.textContent = String(QUESTION_TIME);
     if (UI.timerBar)     { UI.timerBar.style.transition = 'none'; UI.timerBar.style.width = '100%'; }
@@ -316,13 +317,46 @@
     loadQuestion(0, false);
   }
 
-  // ── Start ─────────────────────────────────────────────────────────
+  // ── Start quiz (from instructions screen) ─────────────────────────
   function startQuiz() {
     totalScore = 0;
     if (UI.scoreDisplay) UI.scoreDisplay.textContent = '0';
     hide(screenInstructions);
     show(timerWrap);
     startTimer();
+  }
+
+  // ── Splash ────────────────────────────────────────────────────────
+  function animateSplash() {
+    if (!screenSplash) return;
+    const colLeft  = screenSplash.querySelector('.wih1-splash_col-left');
+    const colRight = screenSplash.querySelector('.wih1-splash_col-right');
+    [colLeft, colRight].forEach(col => {
+      if (!col) return;
+      col.style.opacity         = '0';
+      col.style.transform       = 'translateY(20%)';
+      col.style.transition      = 'none';
+      col.style.transitionDelay = '0s';
+    });
+    screenSplash.getBoundingClientRect(); // force reflow before animating
+    if (colLeft) {
+      colLeft.style.transition      = 'opacity 0.6s ease, transform 0.6s ease';
+      colLeft.style.transitionDelay = '0s';
+      colLeft.style.opacity         = '1';
+      colLeft.style.transform       = 'translateY(0)';
+    }
+    if (colRight) {
+      colRight.style.transition      = 'opacity 0.6s ease, transform 0.6s ease';
+      colRight.style.transitionDelay = '0.12s';
+      colRight.style.opacity         = '1';
+      colRight.style.transform       = 'translateY(0)';
+    }
+  }
+
+  function onStartGame() {
+    hide(screenSplash);
+    show(screenQuiz);
+    show(screenInstructions);
   }
 
   // ── Click delegation ──────────────────────────────────────────────
@@ -342,19 +376,22 @@
 
   // ── Init ──────────────────────────────────────────────────────────
   function setBaseline() {
-    show(screenQuiz);
-    show(screenInstructions);
+    show(screenSplash);
+    hide(screenQuiz);
+    hide(screenInstructions);
     hide(screenResults);
     hide(timeoutOverlay);
     hide(timerWrap);
     if (UI.scoreDisplay) UI.scoreDisplay.textContent = '0';
     loadQuestion(0, false);
+    animateSplash();
   }
 
   function init() {
     prepareAllQuestions();
     setBaseline();
 
+    if (startGameBtn)      startGameBtn.addEventListener('click', onStartGame);
     if (instructionsBtn)   instructionsBtn.addEventListener('click', startQuiz);
     if (UI.timeoutNextBtn) UI.timeoutNextBtn.addEventListener('click', goNext);
     if (restartBtn)        restartBtn.addEventListener('click', resetQuiz);
