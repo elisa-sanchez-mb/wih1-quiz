@@ -153,51 +153,45 @@
   }
 
   // ── Logo swap ─────────────────────────────────────────────────────
-  // Both logos are stacked in the same parent via position:absolute.
-  // They crossfade simultaneously — opacity + blur — for a smooth transition.
-  // swapLogo is called ONLY from loadQuestion (→ 'initial') and revealAnswers (→ 'answer').
-  // resetQuestion intentionally does NOT touch logos to avoid the revert-on-wrong-answer bug.
-
-  const LOGO_MS   = 480;
-  const LOGO_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
-  const LOGO_TRANS = `opacity ${LOGO_MS}ms ${LOGO_EASE}, filter ${LOGO_MS}ms ${LOGO_EASE}`;
+  // Both logos sit in the same parent, stacked via position:absolute.
+  // Transitions are set once via CSS class (see initLogos).
+  // swapLogo(qEl, 'answer') is called only from revealAnswers.
+  // swapLogo(qEl, 'initial') is called only from loadQuestion for a genuinely new question.
+  // The 'data-logo-state' attribute guards against spurious resets.
 
   function initLogos(qEl) {
     const initial = el('initial-logo', qEl);
     const answer  = el('answer-logo',  qEl);
     const wrap    = initial && initial.parentElement;
-
-    // Make the wrapper relatively positioned so absolute children stack correctly
-    if (wrap) {
-      wrap.style.position = 'relative';
-      wrap.style.display  = wrap.style.display || 'block';
-    }
-
+    if (wrap) { wrap.style.position = 'relative'; }
     [initial, answer].forEach(node => {
       if (!node) return;
-      node.style.position = 'absolute';
-      node.style.inset    = '0';
+      node.style.position   = 'absolute';
+      node.style.inset      = '0';
+      node.style.transition = 'none';
       node.removeAttribute('hidden');
     });
-
-    // Set starting state instantly (no animation)
-    if (initial) { initial.style.transition = 'none'; initial.style.opacity = '1'; initial.style.filter = 'blur(0px)'; }
-    if (answer)  { answer.style.transition  = 'none'; answer.style.opacity  = '0'; answer.style.filter  = 'blur(10px)'; }
-
-    // Allow one frame to pass before enabling transitions so init state is never animated
-    requestAnimationFrame(() => {
-      if (initial) initial.style.transition = LOGO_TRANS;
-      if (answer)  answer.style.transition  = LOGO_TRANS;
-    });
+    // Start with initial visible, answer hidden — no animation
+    if (initial) { initial.style.opacity = '1'; initial.style.filter = 'blur(0px)'; }
+    if (answer)  { answer.style.opacity  = '0'; answer.style.filter  = 'blur(10px)'; }
+    qEl.setAttribute('data-logo-state', 'initial');
+    // Enable transitions after the initial paint so the first render never animates
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const trans = 'opacity 650ms cubic-bezier(0.25, 0.1, 0.25, 1), filter 650ms cubic-bezier(0.25, 0.1, 0.25, 1)';
+      if (initial) initial.style.transition = trans;
+      if (answer)  answer.style.transition  = trans;
+    }));
   }
 
   function swapLogo(qEl, state) {
+    // Guard: don't re-apply the same state (prevents flicker on re-init)
+    if (qEl.getAttribute('data-logo-state') === state) return;
+    qEl.setAttribute('data-logo-state', state);
     const initial = el('initial-logo', qEl);
     const answer  = el('answer-logo',  qEl);
-    const showInitial = state === 'initial';
-
-    if (initial) { initial.style.opacity = showInitial ? '1' : '0'; initial.style.filter = showInitial ? 'blur(0px)' : 'blur(10px)'; }
-    if (answer)  { answer.style.opacity  = showInitial ? '0' : '1'; answer.style.filter  = showInitial ? 'blur(10px)' : 'blur(0px)'; }
+    const toAnswer = state === 'answer';
+    if (initial) { initial.style.opacity = toAnswer ? '0' : '1'; initial.style.filter = toAnswer ? 'blur(10px)' : 'blur(0px)'; }
+    if (answer)  { answer.style.opacity  = toAnswer ? '1' : '0'; answer.style.filter  = toAnswer ? 'blur(0px)' : 'blur(10px)'; }
   }
 
   // ── Question lifecycle ────────────────────────────────────────────
