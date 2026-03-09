@@ -18,6 +18,7 @@
   if (!screenQuiz) { console.warn('[Quiz] screen-quiz not found.'); return; }
 
   const QUESTION_TIME = parseInt(screenQuiz.dataset.quizQuestionTime, 10) || 15;
+  const MAX_SCORE     = parseInt(screenQuiz.dataset.quizMaxScore, 10) || 0;
 
   // ── Elements ──────────────────────────────────────────────────────
   const screenSplash       = el('splash');
@@ -35,10 +36,12 @@
     progressTotal:     el('progress-total'),
     scoreDisplay:      el('score-display'),
     finalScore:        el('final-score'),
+    maxScoreDisplay:   el('max-score-display'),
     timerBar:          el('timer-bar'),
     timerText:         el('timer-text'),
     timeoutNextBtn:    el('timeout-next-btn'),
     timeoutAnswerSpan: el('answer', timeoutOverlay),
+    timeoutAnswerLogo: el('timeout-answer-logo'),
   };
 
   const getSubmitBtn = () => el('submit-btn', currentQ()) || el('submit-btn', screenQuiz);
@@ -208,9 +211,10 @@
   }
 
   function updateProgress() {
-    if (UI.progressCurrent) UI.progressCurrent.textContent = String(currentIndex + 1);
-    if (UI.progressTotal)   UI.progressTotal.textContent   = String(TOTAL_QUESTIONS);
-    if (UI.scoreDisplay)    UI.scoreDisplay.textContent    = String(totalScore);
+    if (UI.progressCurrent)  UI.progressCurrent.textContent  = String(currentIndex + 1);
+    if (UI.progressTotal)    UI.progressTotal.textContent     = String(TOTAL_QUESTIONS);
+    if (UI.scoreDisplay)     UI.scoreDisplay.textContent      = String(totalScore);
+    if (UI.maxScoreDisplay)  UI.maxScoreDisplay.textContent   = String(MAX_SCORE);
   }
 
   function showOnlyQuestion(index) {
@@ -315,6 +319,11 @@
     if (!qEl) return;
     revealAnswers(qEl);
     if (UI.timeoutAnswerSpan) UI.timeoutAnswerSpan.textContent = getCorrectText();
+    if (UI.timeoutAnswerLogo) {
+      const answerLogo = el('answer-logo', qEl);
+      const src = answerLogo && (answerLogo.src || answerLogo.getAttribute('src'));
+      if (src) UI.timeoutAnswerLogo.src = src;
+    }
     setDisabled(getSubmitBtn(), true);
     setDisabled(getNextBtn(),   true);
     show(timeoutOverlay);
