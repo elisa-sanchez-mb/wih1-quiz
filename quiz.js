@@ -460,6 +460,14 @@
 
   function init() {
     prepareAllQuestions();
+
+    // Shuffle question order (correctEls shuffled in lockstep to keep index alignment)
+    for (let i = questionEls.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [questionEls[i], questionEls[j]] = [questionEls[j], questionEls[i]];
+      [correctEls[i],  correctEls[j]]  = [correctEls[j],  correctEls[i]];
+    }
+
     setBaseline();
 
     if (startGameBtn)      startGameBtn.addEventListener('click', onStartGame);
