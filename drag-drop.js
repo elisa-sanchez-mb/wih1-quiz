@@ -106,6 +106,9 @@
   // matched against data-logo-id on logo drop zones.  No hardcoding.
 
   function getCorrectLogoId (qEl) {
+    // Use the value cached at initQuestion time (before the prop may have been
+    // reparented to document.body by liftPropToBody), so this always resolves.
+    if (qEl.dataset.wih1Correct) return qEl.dataset.wih1Correct
     var prop = qEl.querySelector('.quiz-prop')
     return prop ? prop.dataset.correct : null
   }
@@ -527,6 +530,10 @@
 
     var prop = qEl.querySelector('.quiz-prop')
     if (!prop) return
+
+    // Cache the correct answer on qEl NOW, before the prop might be reparented
+    // to document.body by liftPropToBody (which makes qEl.querySelector fail).
+    if (prop.dataset.correct) qEl.dataset.wih1Correct = prop.dataset.correct
 
     resetProp(prop)
     wrapDropZones(qEl)
