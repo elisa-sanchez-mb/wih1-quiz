@@ -313,11 +313,8 @@
 
     revealAnswers(qEl)
     showFeedback(qEl, false, 0)
-
-    // Snap prop back to origin if it's mid-drag or placed on a zone
-    var prop = qEl.querySelector('.quiz-prop')
-    if (prop) snapPropBack(prop)
-
+    // Prop stays wherever it is — the locked check in the move listener
+    // already stops any in-progress drag.
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   false)
   }
@@ -411,6 +408,45 @@
   var SNAP_TO_MS   = 250
   var OVERLAP      = 0.3
 
+  // ─── PROP REPARENTING ─────────────────────────────────────────────────────────
+  // CSS transforms on any ancestor break position:fixed (fixed becomes relative
+  // to that ancestor instead of the viewport).  To escape all such contexts we
+  // move the prop to document.body on drag start and restore it afterward.
+
+  var _propOrigins = new Map()
+
+  function liftPropToBody (prop) {
+    if (_propOrigins.has(prop)) return          // already lifted
+    var rect = prop.getBoundingClientRect()
+    _propOrigins.set(prop, { parent: prop.parentNode, next: prop.nextSibling })
+    document.body.appendChild(prop)             // reparent first — avoids stale rects
+    prop.style.position   = 'fixed'
+    prop.style.left       = rect.left + 'px'
+    prop.style.top        = rect.top  + 'px'
+    prop.style.width      = rect.width  + 'px'
+    prop.style.height     = rect.height + 'px'
+    prop.style.zIndex     = '9999'
+    prop.style.transform  = 'translate(0, 0)'
+    prop.style.transition = ''
+    prop.setAttribute('data-x', 0)
+    prop.setAttribute('data-y', 0)
+  }
+
+  function restorePropToFlow (prop) {
+    var saved = _propOrigins.get(prop)
+    if (!saved) return
+    _propOrigins.delete(prop)
+    prop.style.position = ''
+    prop.style.left     = ''
+    prop.style.top      = ''
+    prop.style.width    = ''
+    prop.style.height   = ''
+    prop.style.zIndex   = ''
+    if (saved.parent && saved.parent.isConnected) {
+      saved.parent.insertBefore(prop, saved.next)
+    }
+  }
+
   // ─── DROP ZONE WRAPPING ───────────────────────────────────────────────────────
   // Wraps each .logo-drop-zone <img> in a .wih1-drop-overlay <div> so the img
   // never intercepts pointer events meant for the dragged prop.  Idempotent.
@@ -444,19 +480,14 @@
 
   function snapPropBack (prop) {
     // Animate back to the fixed origin (translate 0,0 = the viewport position
-    // captured at drag start), then restore to normal in-flow positioning.
+    // captured at drag start), then restore to in-flow positioning.
     prop.style.transition = 'transform ' + SNAP_BACK_MS + 'ms cubic-bezier(0.34, 1.56, 0.64, 1)'
     prop.style.transform  = 'translate(0, 0)'
     prop.setAttribute('data-x', 0)
     prop.setAttribute('data-y', 0)
     setTimeout(function () {
-      prop.style.position   = ''
-      prop.style.left       = ''
-      prop.style.top        = ''
-      prop.style.width      = ''
-      prop.style.height     = ''
-      prop.style.zIndex     = ''
       prop.style.transition = ''
+      restorePropToFlow(prop)
     }, SNAP_BACK_MS)
   }
 
@@ -474,6 +505,7 @@
   }
 
   function resetProp (prop) {
+    restorePropToFlow(prop)
     prop.style.transform     = ''
     prop.style.transition    = ''
     prop.style.position      = ''
@@ -524,21 +556,10 @@
       listeners: {
         start: function (event) {
           if (locked) { event.interaction.stop(); return }
-          // Switch to position:fixed so the prop escapes any overflow:hidden
-          // ancestor (e.g. the card container) and renders above elements in
-          // sibling columns.  position:relative + z-index only works within
-          // the same stacking context; fixed breaks out entirely.
-          var rect = prop.getBoundingClientRect()
-          prop.style.position   = 'fixed'
-          prop.style.left       = rect.left + 'px'
-          prop.style.top        = rect.top  + 'px'
-          prop.style.width      = rect.width  + 'px'
-          prop.style.height     = rect.height + 'px'
-          prop.style.zIndex     = '9999'
-          prop.style.transform  = 'translate(0, 0)'
-          prop.style.transition = ''
-          prop.setAttribute('data-x', 0)
-          prop.setAttribute('data-y', 0)
+          // Reparent to body so position:fixed is always relative to the
+          // viewport, not a transformed ancestor (which would misalign the
+          // drag start point).
+          liftPropToBody(prop)
         },
         move: function (event) {
           if (locked) { snapPropBack(prop); return }
