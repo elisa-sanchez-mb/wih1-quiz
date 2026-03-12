@@ -304,7 +304,7 @@
     }
     if (feedbackAnswer) {
       feedbackAnswer.textContent = isCorrect
-        ? `Correct! +${Math.max(0, timeRemaining)} points`
+        ? `Correct. +${Math.max(0, timeRemaining)} points`
         : `Not quite. The correct answer is ${getCorrectText()}`;
     }
 
