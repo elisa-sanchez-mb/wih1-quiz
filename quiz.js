@@ -361,13 +361,21 @@
     Object.defineProperty(input, 'value', {   // shadow instance property
       configurable: true,                      // keeps it re-lockable on replay
       get: () => strVal,
-      set: () => {},                           // console assignments silently ignored
+      set: () => {},                           // element.value = x is a silent no-op
     });
+    // Watch for readonly being removed and immediately restore it
+    if (input._lockObserver) input._lockObserver.disconnect();
+    input._lockObserver = new MutationObserver(() => {
+      if (!input.hasAttribute('readonly')) input.setAttribute('readonly', '');
+      _nativeInputSetter.call(input, strVal); // reset value in case native setter was used
+    });
+    input._lockObserver.observe(input, { attributes: true });
   }
 
   function unlockScoreInput() {
     const input = UI.finalScoreInput;
     if (!input) return;
+    if (input._lockObserver) { input._lockObserver.disconnect(); input._lockObserver = null; }
     delete input.value;                        // remove instance shadow → falls back to prototype
     _nativeInputSetter.call(input, '');
     input.removeAttribute('readonly');
