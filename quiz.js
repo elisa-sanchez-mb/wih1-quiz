@@ -25,7 +25,7 @@
   const screenInstructions = el('screen-instructions');
   const screenResults      = el('results');
   const timeoutOverlay     = el('timeout-overlay');
-  const timerWrap          = document.querySelector('.wih1-timer_wrap');
+  const timerWrap          = document.querySelector('.csg-design-system---makebuild--wih1-timer_wrap');
   const instructionsBtn    = el('instructions-btn');
   const startGameBtn       = el('start-game-button');
   const restartBtn         = el('restart-btn');
