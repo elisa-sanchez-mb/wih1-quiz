@@ -29,8 +29,8 @@
   const instructionsBtn    = el('instructions-btn');
   const startGameBtn       = el('start-game-button');
   const restartBtn         = el('restart-btn');
-  const resultsWrap        = document.querySelector('.wih1-results_wrap');
-
+  const resultsWrap        = el('results');
+  
   const UI = {
     progressCurrent:   el('progress-current'),
     progressTotal:     el('progress-total'),
