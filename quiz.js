@@ -441,8 +441,8 @@
   // ── Splash ────────────────────────────────────────────────────────
   function animateSplash() {
     if (!screenSplash) return;
-    const colLeft  = screenSplash.querySelector('.wih1-splash_col-left');
-    const colRight = screenSplash.querySelector('.wih1-splash_col-right');
+    const colLeft  = screenSplash.querySelector('.csg-design-system---makebuild--wih1-splash_col-left');
+    const colRight = screenSplash.querySelector('.csg-design-system---makebuild--wih1-splash_col-right');
     [colLeft, colRight].forEach(col => {
       if (!col) return;
       col.style.opacity         = '0';
@@ -466,7 +466,7 @@
   }
 
   function onStartGame() {
-    const card = screenInstructions && screenInstructions.querySelector('.wih1-instructions_card');
+    const card = screenInstructions && screenInstructions.querySelector('.csg-design-system---makebuild--wih1-instructions_card');
     if (card) {
       card.style.opacity         = '0';
       card.style.transform       = 'translateY(30%)';
