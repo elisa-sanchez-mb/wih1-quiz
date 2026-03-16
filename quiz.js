@@ -391,6 +391,9 @@
     if (isZeroScore) {
       if (UI.resultsHeadline) UI.resultsHeadline.textContent = 'That was a tough one.';
       if (UI.resultsMessage)  UI.resultsMessage.textContent  = 'No points this time, but you can replay the game and improve your score.';
+    } else if (totalScore < 75) {
+      if (UI.resultsHeadline) UI.resultsHeadline.textContent = 'A promising start';
+      if (UI.resultsMessage)  UI.resultsMessage.textContent  = 'Can you score more points?';
     }
     lockScoreInput(totalScore);
     show(screenResults);
