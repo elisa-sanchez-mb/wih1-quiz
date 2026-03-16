@@ -17,7 +17,7 @@
   //
   // HTML conventions followed (same as quiz.js):
   //   - data-quiz-element="…"  identifies all functional elements
-  //   - data-visibility="True/False"  controls show/hide
+  //   - data-visibility="1/0"  controls show/hide
   //   - data-disabled="true/false"    mirrors button disabled state for CSS
   //   - data-logo-id="…"             on each logo drop zone
   //   - data-correct="…"             on the draggable prop (correct logo-id)
@@ -43,10 +43,10 @@
     return Array.from((root || document).querySelectorAll('[data-quiz-element="' + name + '"]'))
   }
   function show (node) {
-    if (node) { node.setAttribute('data-visibility', 'True'); node.removeAttribute('hidden') }
+    if (node) { node.setAttribute('data-visibility', '1'); node.removeAttribute('hidden') }
   }
   function hide (node) {
-    if (node) node.setAttribute('data-visibility', 'False')
+    if (node) node.setAttribute('data-visibility', '0')
   }
   function setDisabled (btn, disabled) {
     if (!btn) return
@@ -251,7 +251,7 @@
     var feedbackWrap   = qel('feedback-msg',    qEl)
     var feedbackAnswer = qel('feedback-answer', qEl)
     if (feedbackWrap) {
-      feedbackWrap.setAttribute('data-disabled',         'false')
+      feedbackWrap.style.opacity = '1'
       feedbackWrap.setAttribute('data-feedback-correct', isCorrect ? 'true' : 'false')
     }
     if (feedbackAnswer) {
@@ -265,7 +265,7 @@
     var feedbackWrap   = qel('feedback-msg',    qEl)
     var feedbackAnswer = qel('feedback-answer', qEl)
     if (feedbackWrap) {
-      feedbackWrap.setAttribute('data-disabled', 'true')
+      feedbackWrap.style.opacity = '0'
       feedbackWrap.removeAttribute('data-feedback-correct')
     }
     if (feedbackAnswer) feedbackAnswer.textContent = ''
