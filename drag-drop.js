@@ -56,7 +56,7 @@
 
   // ─── CONFIGURATION ───────────────────────────────────────────────────────────
 
-  var screenQuiz = qel('screen-quiz')
+  var screenQuiz = qel('screen-dragdrop') || qel('screen-quiz')
   if (!screenQuiz) return
 
   var QUESTION_TIME = parseInt(screenQuiz.dataset.quizQuestionTime, 10) || 15
@@ -275,11 +275,28 @@
 
   function revealAnswers (qEl) {
     var correctLogoId = getCorrectLogoId(qEl)
+
+    // Mark each answer logo image (CSS uses data-correct / data-locked)
     qels('answer', qEl).forEach(function (btn) {
       btn.setAttribute('data-locked',  'true')
       btn.setAttribute('data-correct', btn.dataset.logoId === correctLogoId ? 'true' : 'false')
     })
-    swapLogo(qEl, 'answer')
+
+    // Mark the filled drop zone's remove button with correct/incorrect feedback
+    // so the X icon swaps to the tick or cross icon via CSS
+    if (selectedLogoId) {
+      qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+        if (zone.dataset.dropBg === selectedLogoId) {
+          var removeEl = zone.querySelector('[data-drop-element="remove"]')
+          if (removeEl) {
+            removeEl.setAttribute('data-feedback-correct',
+              selectedLogoId === correctLogoId ? 'true' : 'false')
+          }
+        }
+      })
+    }
+
+    swapLogo(qEl, 'answer')  // no-op when initial-logo/answer-logo aren't present
   }
 
   // ─── SUBMIT ───────────────────────────────────────────────────────────────────
@@ -450,22 +467,6 @@
     }
   }
 
-  // ─── DROP ZONE WRAPPING ───────────────────────────────────────────────────────
-  // Wraps each .logo-drop-zone <img> in a .wih1-drop-overlay <div> so the img
-  // never intercepts pointer events meant for the dragged prop.  Idempotent.
-
-  function wrapDropZones (qEl) {
-    qEl.querySelectorAll('.logo-drop-zone').forEach(function (img) {
-      if (img.parentElement.classList.contains('wih1-drop-overlay')) return
-      var wrapper        = document.createElement('div')
-      wrapper.className  = 'wih1-drop-overlay'
-      wrapper.dataset.logoId = img.dataset.logoId
-      img.parentNode.insertBefore(wrapper, img)
-      wrapper.appendChild(img)
-      img.style.pointerEvents = 'none'
-    })
-  }
-
   // ─── PROP POSITION HELPERS ───────────────────────────────────────────────────
 
   function getPropPos (prop) {
@@ -524,36 +525,74 @@
   }
 
   // ─── PER-QUESTION DRAG-DROP INIT ──────────────────────────────────────────────
+  //
+  // New HTML structure (csghome variant):
+  //   .image_wrap.is-dragdrop
+  //     img.quiz-prop        — draggable; CSS: opacity:0 default, scale(0.4) opacity:1
+  //                            when data-drag-active="true" (JS sets this during drag)
+  //     img.quiz_drag_img    — fixed background image; stays in slot always; JS never moves it
+  //     .drag_drop_img_instructions — instructions overlay, hidden on first drag
+  //
+  //   .wih1_drop-zone_wrap[data-drop-bg]   — one per answer option
+  //     [data-drop-element="previewWrap"]  — receives a cloned <img> of the prop on drop
+  //     [data-drop-element="remove"]       — X / correct / incorrect icon; clears the drop
+  //     .wih1_drop_logo_wrap > img.wih1_drop_logo[data-logo-id][data-quiz-element="answer"]
+  //
+  // Mechanic:
+  //   1. User drags quiz-prop → it lifts to body and follows pointer at 0.4 scale (CSS).
+  //      quiz_drag_img stays fixed in the slot — JS never touches it.
+  //   2. Drop on .wih1_drop-zone_wrap → quiz-prop snaps to previewWrap centre,
+  //      preview <img> injected, quiz-prop restored to flow (CSS hides it); submit enabled.
+  //   3. No drop → quiz-prop snaps back; data-drag-active removed; CSS hides it again.
+  //   4. Only one drop per question (placed flag); remove button resets everything.
+  //   5. Submit → revealAnswers → correct/incorrect marked on remove element.
 
   function initQuestion (qEl) {
     if (!qEl) return
 
-    var prop = qEl.querySelector('.quiz-prop')
+    var prop    = qEl.querySelector('.quiz-prop')       // draggable; CSS ghost via data-drag-active
+    var dragImg = qEl.querySelector('.quiz_drag_img')   // fixed background image — JS never moves it
+    var instrEl = qEl.querySelector('.drag_drop_img_instructions')
     if (!prop) return
 
-    // Cache the correct answer on qEl NOW, before the prop might be reparented
-    // to document.body by liftPropToBody (which makes qEl.querySelector fail).
+    // Cache correct answer before any reparenting
     if (prop.dataset.correct) qEl.dataset.wih1Correct = prop.dataset.correct
 
+    // Prevent native browser image drag
+    prop.setAttribute('draggable', 'false')
+    if (dragImg) dragImg.setAttribute('draggable', 'false')
+
+    // ── Reset prop (CSS controls opacity via data-drag-active) ─────────────────
     resetProp(prop)
-    wrapDropZones(qEl)
+    prop.removeAttribute('data-drag-active')
 
-    // Tear down stale interact.js bindings
+    // ── Reset instructions overlay ─────────────────────────────────────────────
+    if (instrEl) instrEl.style.display = ''
+
+    // ── Reset drop zones ───────────────────────────────────────────────────────
+    qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+      var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
+      var removeEl    = zone.querySelector('[data-drop-element="remove"]')
+      if (previewWrap) previewWrap.innerHTML = ''
+      if (removeEl) {
+        removeEl.style.opacity = '0'
+        removeEl.removeAttribute('data-feedback-correct')
+      }
+      zone.removeAttribute('data-drag-over')
+      zone.removeAttribute('data-filled')
+    })
+
+    // ── Tear down stale interact.js bindings ───────────────────────────────────
     try { interact(prop).unset() } catch (_) {}
-    qEl.querySelectorAll('.wih1-drop-overlay').forEach(function (w) {
-      try { interact(w).unset() } catch (_) {}
+    qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+      try { interact(zone).unset() } catch (_) {}
     })
 
-    // Reset drop zone visual state
-    qEl.querySelectorAll('.wih1-drop-overlay').forEach(function (w) {
-      w.removeAttribute('data-drag-over')
-      w.classList.remove('drop-zone--active', 'drop-zone--correct', 'drop-zone--wrong', 'drop-zone--ready')
-    })
+    // ── Per-gesture flags ──────────────────────────────────────────────────────
+    var placed      = false  // true after a successful drop; cleared by remove
+    var dropHandled = false  // true when ondrop fired during the current gesture
 
-    // Flag: did ondrop fire during this drag gesture?
-    var dropHandled = false
-
-    // ── Draggable ─────────────────────────────────────────────────────────────
+    // ── Draggable (quiz-prop) ──────────────────────────────────────────────────
     interact(prop).draggable({
       inertia:    false,
       autoScroll: true,
@@ -562,11 +601,10 @@
       ],
       listeners: {
         start: function (event) {
-          if (locked) { event.interaction.stop(); return }
-          // Reparent to body so position:fixed is always relative to the
-          // viewport, not a transformed ancestor (which would misalign the
-          // drag start point).
+          if (locked || placed) { event.interaction.stop(); return }
           liftPropToBody(prop)
+          prop.setAttribute('data-drag-active', 'true')  // CSS: scale(0.4) opacity:1
+          if (instrEl) instrEl.style.display = 'none'
         },
         move: function (event) {
           if (locked) { snapPropBack(prop); return }
@@ -575,59 +613,117 @@
         },
         end: function () {
           if (!dropHandled) {
-            // Released mid-air — snap back
+            // No drop — snap back; after animation CSS opacity:0 takes over
             snapPropBack(prop)
+            setTimeout(function () {
+              prop.removeAttribute('data-drag-active')
+              if (instrEl) instrEl.style.display = ''
+            }, SNAP_BACK_MS)
           }
-          // If a drop WAS handled, leave position:relative + z-index:1000 so
-          // the prop stays visually on top of the logo it landed on.
+          // Drop case: data-drag-active removed inside ondrop's setTimeout
           dropHandled = false
         }
       }
     })
 
-    // ── Drop zones ────────────────────────────────────────────────────────────
-    qEl.querySelectorAll('.wih1-drop-overlay').forEach(function (wrapper) {
-      interact(wrapper).dropzone({
+    // ── Drop zones (.wih1_drop-zone_wrap) ─────────────────────────────────────
+    qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+
+      interact(zone).dropzone({
         accept:  '.quiz-prop',
         overlap: OVERLAP,
 
         ondropactivate: function () {
-          wrapper.classList.add('drop-zone--ready')
+          zone.setAttribute('data-drag-over', 'ready')
         },
-        ondragenter: function (event) {
-          wrapper.setAttribute('data-drag-over', 'true')
-          wrapper.classList.add('drop-zone--active')
-          event.relatedTarget.classList.add('prop--over-zone')
+        ondragenter: function () {
+          zone.setAttribute('data-drag-over', 'true')
+          prop.classList.add('prop--over-zone')
         },
-        ondragleave: function (event) {
-          wrapper.removeAttribute('data-drag-over')
-          wrapper.classList.remove('drop-zone--active')
-          event.relatedTarget.classList.remove('prop--over-zone')
+        ondragleave: function () {
+          zone.removeAttribute('data-drag-over')
+          prop.classList.remove('prop--over-zone')
         },
-        ondrop: function (event) {
+        ondrop: function () {
           dropHandled = true
-          wrapper.removeAttribute('data-drag-over')
-          wrapper.classList.remove('drop-zone--active', 'drop-zone--ready')
-          event.relatedTarget.classList.remove('prop--over-zone')
+          zone.removeAttribute('data-drag-over')
+          prop.classList.remove('prop--over-zone')
+          if (locked) return
 
-          if (locked) { snapPropBack(prop); return }
+          placed         = true
+          selectedLogoId = zone.dataset.dropBg
 
-          // Record selection and snap prop to zone centre
-          selectedLogoId = wrapper.dataset.logoId
-          snapPropToZone(prop, wrapper)
+          // Snap prop to previewWrap centre, then inject preview and hide prop
+          var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
+          var snapTarget  = previewWrap || zone
+          snapPropToZone(prop, snapTarget)
 
-          // Mark the corresponding answer element as selected (for CSS states)
+          setTimeout(function () {
+            if (previewWrap) {
+              previewWrap.innerHTML = ''
+              var srcEl  = dragImg || prop   // use the full-size fixed image as source
+              var img    = document.createElement('img')
+              img.src    = srcEl.src
+              var srcset = srcEl.getAttribute('srcset')
+              var sizes  = srcEl.getAttribute('sizes')
+              if (srcset) img.setAttribute('srcset', srcset)
+              if (sizes)  img.setAttribute('sizes',  sizes)
+              img.style.width     = '100%'
+              img.style.height    = '100%'
+              img.style.objectFit = 'contain'
+              previewWrap.appendChild(img)
+            }
+            restorePropToFlow(prop)
+            prop.removeAttribute('data-drag-active')  // CSS: opacity:0
+          }, SNAP_TO_MS)
+
+          // Show remove button
+          var removeEl = zone.querySelector('[data-drop-element="remove"]')
+          if (removeEl) removeEl.style.opacity = '1'
+
+          // Mark answer logo as selected
           qels('answer', qEl).forEach(function (btn) {
             btn.setAttribute('data-selected', btn.dataset.logoId === selectedLogoId ? 'true' : 'false')
           })
 
-          // Enable submit button — user confirms by clicking it
           setDisabled(getSubmitBtn(), false)
         },
         ondropdeactivate: function () {
-          wrapper.classList.remove('drop-zone--ready', 'drop-zone--active')
+          zone.removeAttribute('data-drag-over')
         }
       })
+
+      // ── Remove button ──────────────────────────────────────────────────────
+      var removeEl = zone.querySelector('[data-drop-element="remove"]')
+      if (removeEl) {
+        // Clone to clear any stale listeners from previous questions
+        var freshRemove = removeEl.cloneNode(true)
+        removeEl.parentNode.replaceChild(freshRemove, removeEl)
+        freshRemove.addEventListener('click', function () {
+          if (locked) return
+
+          // Clear preview
+          var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
+          if (previewWrap) previewWrap.innerHTML = ''
+
+          // Hide remove button and clear feedback state
+          freshRemove.style.opacity = '0'
+          freshRemove.removeAttribute('data-feedback-correct')
+
+          // quiz_drag_img is untouched — it never moved
+          if (instrEl) instrEl.style.display = ''
+
+          // Reset answer selection
+          qels('answer', qEl).forEach(function (btn) {
+            btn.setAttribute('data-selected', 'false')
+          })
+
+          // Reset state so the user can drag again
+          selectedLogoId = null
+          placed         = false
+          setDisabled(getSubmitBtn(), true)
+        })
+      }
     })
   }
 
