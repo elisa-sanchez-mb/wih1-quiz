@@ -446,8 +446,10 @@
     prop.style.width      = rect.width  + 'px'
     prop.style.height     = rect.height + 'px'
     prop.style.zIndex     = '9999'
-    prop.style.transform  = 'translate(0, 0)'
+    prop.style.transform  = ''                  // CSS owns transform (scale, etc.)
     prop.style.transition = ''
+    prop.dataset.originLeft = String(rect.left)
+    prop.dataset.originTop  = String(rect.top)
     prop.setAttribute('data-x', 0)
     prop.setAttribute('data-y', 0)
   }
@@ -479,14 +481,21 @@
   function setPropPos (prop, x, y) {
     prop.setAttribute('data-x', x)
     prop.setAttribute('data-y', y)
-    prop.style.transform = 'translate(' + x + 'px, ' + y + 'px)'
+    var originLeft = parseFloat(prop.dataset.originLeft) || 0
+    var originTop  = parseFloat(prop.dataset.originTop)  || 0
+    prop.style.left = (originLeft + x) + 'px'
+    prop.style.top  = (originTop  + y) + 'px'
   }
 
   function snapPropBack (prop) {
-    // Animate back to the fixed origin (translate 0,0 = the viewport position
-    // captured at drag start), then restore to in-flow positioning.
-    prop.style.transition = 'transform ' + SNAP_BACK_MS + 'ms cubic-bezier(0.34, 1.56, 0.64, 1)'
-    prop.style.transform  = 'translate(0, 0)'
+    // Animate back to the fixed origin (left/top captured at drag start),
+    // then restore to in-flow positioning.
+    var originLeft = parseFloat(prop.dataset.originLeft) || 0
+    var originTop  = parseFloat(prop.dataset.originTop)  || 0
+    var ease = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+    prop.style.transition = 'left ' + SNAP_BACK_MS + 'ms ' + ease + ', top ' + SNAP_BACK_MS + 'ms ' + ease
+    prop.style.left = originLeft + 'px'
+    prop.style.top  = originTop  + 'px'
     prop.setAttribute('data-x', 0)
     prop.setAttribute('data-y', 0)
     setTimeout(function () {
@@ -496,15 +505,16 @@
   }
 
   function snapPropToZone (prop, zone) {
-    var propRect = prop.getBoundingClientRect()
-    var zoneRect = zone.getBoundingClientRect()
-    var pos      = getPropPos(prop)
-    var offsetX  = (zoneRect.left + zoneRect.width  / 2) - (propRect.left + propRect.width  / 2)
-    var offsetY  = (zoneRect.top  + zoneRect.height / 2) - (propRect.top  + propRect.height / 2)
-    var finalX   = pos.x + offsetX
-    var finalY   = pos.y + offsetY
-    prop.style.transition = 'transform ' + SNAP_TO_MS + 'ms ease'
-    setPropPos(prop, finalX, finalY)
+    var currentLeft = parseFloat(prop.style.left) || 0
+    var currentTop  = parseFloat(prop.style.top)  || 0
+    var propRect    = prop.getBoundingClientRect()
+    var zoneRect    = zone.getBoundingClientRect()
+    // Move visual centre of prop to visual centre of zone
+    var deltaX = (zoneRect.left + zoneRect.width  / 2) - (propRect.left + propRect.width  / 2)
+    var deltaY = (zoneRect.top  + zoneRect.height / 2) - (propRect.top  + propRect.height / 2)
+    prop.style.transition = 'left ' + SNAP_TO_MS + 'ms ease, top ' + SNAP_TO_MS + 'ms ease'
+    prop.style.left = (currentLeft + deltaX) + 'px'
+    prop.style.top  = (currentTop  + deltaY) + 'px'
     setTimeout(function () { prop.style.transition = '' }, SNAP_TO_MS)
   }
 
@@ -571,9 +581,12 @@
 
     // ── Reset drop zones ───────────────────────────────────────────────────────
     qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
-      var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
-      var removeEl    = zone.querySelector('[data-drop-element="remove"]')
-      if (previewWrap) previewWrap.innerHTML = ''
+      var previewImg = zone.querySelector('.wih1_drop_preview_img')
+      var removeEl   = zone.querySelector('[data-drop-element="remove"]')
+      if (previewImg) {
+        previewImg.src           = ''
+        previewImg.style.opacity = '0'
+      }
       if (removeEl) {
         removeEl.style.opacity = '0'
         removeEl.removeAttribute('data-feedback-correct')
@@ -602,8 +615,10 @@
       listeners: {
         start: function (event) {
           if (locked || placed) { event.interaction.stop(); return }
+          prop.setAttribute('data-drag-active', 'true')  // set BEFORE lift — CSS scale applies from frame 1
           liftPropToBody(prop)
-          prop.setAttribute('data-drag-active', 'true')  // CSS: scale(0.4) opacity:1
+          qEl.classList.add('is-dragging')               // CSS hook: .is-dragging .wih1_drop-zone_dragging
+          qEl.querySelectorAll('.wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
           if (instrEl) instrEl.style.display = 'none'
         },
         move: function (event) {
@@ -620,6 +635,9 @@
               if (instrEl) instrEl.style.display = ''
             }, SNAP_BACK_MS)
           }
+          // Remove dragging state immediately on gesture end (drop or no-drop)
+          qEl.classList.remove('is-dragging')
+          qEl.querySelectorAll('.wih1_drop_preview').forEach(function (p) { p.classList.remove('is-dragging') })
           // Drop case: data-drag-active removed inside ondrop's setTimeout
           dropHandled = false
         }
@@ -653,25 +671,21 @@
           placed         = true
           selectedLogoId = zone.dataset.dropBg
 
-          // Snap prop to previewWrap centre, then inject preview and hide prop
+          // Snap prop to previewWrap centre, then reveal the existing preview img
           var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
+          var previewImg  = zone.querySelector('.wih1_drop_preview_img')
           var snapTarget  = previewWrap || zone
           snapPropToZone(prop, snapTarget)
 
           setTimeout(function () {
-            if (previewWrap) {
-              previewWrap.innerHTML = ''
-              var srcEl  = dragImg || prop   // use the full-size fixed image as source
-              var img    = document.createElement('img')
-              img.src    = srcEl.src
+            if (previewImg) {
+              var srcEl  = dragImg || prop   // use the full-size static image as source
+              previewImg.src = srcEl.src
               var srcset = srcEl.getAttribute('srcset')
               var sizes  = srcEl.getAttribute('sizes')
-              if (srcset) img.setAttribute('srcset', srcset)
-              if (sizes)  img.setAttribute('sizes',  sizes)
-              img.style.width     = '100%'
-              img.style.height    = '100%'
-              img.style.objectFit = 'contain'
-              previewWrap.appendChild(img)
+              if (srcset) previewImg.setAttribute('srcset', srcset)
+              if (sizes)  previewImg.setAttribute('sizes',  sizes)
+              previewImg.style.opacity = '1'
             }
             restorePropToFlow(prop)
             prop.removeAttribute('data-drag-active')  // CSS: opacity:0
@@ -702,9 +716,12 @@
         freshRemove.addEventListener('click', function () {
           if (locked) return
 
-          // Clear preview
-          var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
-          if (previewWrap) previewWrap.innerHTML = ''
+          // Hide the preview image
+          var previewImg = zone.querySelector('.wih1_drop_preview_img')
+          if (previewImg) {
+            previewImg.src           = ''
+            previewImg.style.opacity = '0'
+          }
 
           // Hide remove button and clear feedback state
           freshRemove.style.opacity = '0'
