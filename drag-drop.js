@@ -94,21 +94,45 @@
 
   function injectDragStyles () {
     if (document.getElementById('wih1-drag-drop-styles')) return
+
+    // Encode the exact SVG from the design spec as a background-image.
+    // Using a ::before pseudo-element (position:absolute) means zero layout shift.
+    // vector-effect="non-scaling-stroke" keeps stroke-width at 2px at any element size.
+    // The gradient ID is scoped to avoid collisions with other page SVGs.
+    var svgBorder = 'url("data:image/svg+xml,' + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 246 134' preserveAspectRatio='none'>" +
+        "<defs>" +
+          "<linearGradient id='wih1dg' x1='123' y1='31.9' x2='123' y2='102.1' gradientUnits='userSpaceOnUse'>" +
+            "<stop stop-opacity='0'/><stop offset='1'/>" +
+          "</linearGradient>" +
+        "</defs>" +
+        "<g opacity='0.5'>" +
+          "<rect x='1' y='1' width='244' height='132' rx='3' fill='none' stroke='#FAFAFD' stroke-width='2' stroke-linecap='round' stroke-dasharray='8 8' vector-effect='non-scaling-stroke'/>" +
+          "<rect x='1' y='1' width='244' height='132' rx='3' fill='none' stroke='url(#wih1dg)' stroke-opacity='0.2' stroke-width='2' stroke-linecap='round' stroke-dasharray='8 8' vector-effect='non-scaling-stroke'/>" +
+        "</g>" +
+      "</svg>"
+    ) + '")'
+
     var style = document.createElement('style')
     style.id = 'wih1-drag-drop-styles'
     style.textContent = [
-      /* Dashed border on all zones while ANY drag is in flight */
-      '.is-dragging .wih1_drop-zone_wrap[data-drag-over="ready"] {',
-      '  border: 2px dashed rgba(250,250,253,0.5) !important;',
-      '  border-radius: 3px !important;',
-      '  box-sizing: border-box;',
+      /* Drop zones need a stacking context for the ::before overlay */
+      '.wih1_drop-zone_wrap { position: relative; }',
+      /* Dashed border via absolutely-positioned ::before — no layout shift */
+      '.is-dragging .wih1_drop-zone_wrap[data-drag-over="ready"]::before {',
+      '  content: "";',
+      '  position: absolute;',
+      '  inset: 0;',
+      '  pointer-events: none;',
+      '  background-image: ' + svgBorder + ';',
+      '  background-size: 100% 100%;',
+      '  z-index: 1;',
       '}',
-      /* Gradient bg + solid white border when prop is over THIS zone */
+      /* Gradient bg + outline (not border) when prop is over THIS zone — no layout shift */
       '.wih1_drop-zone_wrap[data-drag-over="true"] {',
       '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
-      '  border: 2px solid #FAFAFD !important;',
-      '  border-radius: 3px !important;',
-      '  box-sizing: border-box;',
+      '  outline: 2px solid #FAFAFD !important;',
+      '  outline-offset: -1px !important;',
       '}',
     ].join('\n')
     document.head.appendChild(style)
