@@ -728,7 +728,7 @@
           prop.classList.add('prop--over-zone')
         },
         ondragleave: function () {
-          zone.removeAttribute('data-drag-over')
+          zone.setAttribute('data-drag-over', 'ready')  // restore dashed-border state; 'ready' removed by ondropdeactivate
           prop.classList.remove('prop--over-zone')
         },
         ondrop: function () {
