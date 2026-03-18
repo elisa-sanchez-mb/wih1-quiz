@@ -75,7 +75,10 @@
 
   // ─── UI REFERENCES ───────────────────────────────────────────────────────────
 
-  var timerWrap = document.querySelector('.wih1-timer_wrap')
+  var timerWrap      = document.querySelector('.wih1-timer_wrap')
+  var timeoutOverlay = qel('timeout-overlay')
+  var timeoutNextBtn = qel('timeout-next-btn')
+
   var UI = {
     progressCurrent: qel('progress-current'),
     progressTotal:   qel('progress-total'),
@@ -84,6 +87,31 @@
     timerText:       qel('timer-text'),
     maxScoreDisplay: qel('max-score-display'),
     finalScore:      qel('final-score'),
+  }
+
+  // ─── DROP-ZONE DRAG STYLES ────────────────────────────────────────────────────
+  // Injected once at boot; uses data-attributes set by the drag engine.
+
+  function injectDragStyles () {
+    if (document.getElementById('wih1-drag-drop-styles')) return
+    var style = document.createElement('style')
+    style.id = 'wih1-drag-drop-styles'
+    style.textContent = [
+      /* Dashed border on all zones while ANY drag is in flight */
+      '.is-dragging .wih1_drop-zone_wrap[data-drag-over="ready"] {',
+      '  border: 2px dashed rgba(250,250,253,0.5) !important;',
+      '  border-radius: 3px !important;',
+      '  box-sizing: border-box;',
+      '}',
+      /* Gradient bg + solid white border when prop is over THIS zone */
+      '.wih1_drop-zone_wrap[data-drag-over="true"] {',
+      '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
+      '  border: 2px solid #FAFAFD !important;',
+      '  border-radius: 3px !important;',
+      '  box-sizing: border-box;',
+      '}',
+    ].join('\n')
+    document.head.appendChild(style)
   }
 
   // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -337,6 +365,9 @@
     // already stops any in-progress drag.
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   false)
+
+    // Show timeout overlay popup (mirrors quiz.js behaviour)
+    if (timeoutOverlay) show(timeoutOverlay)
   }
 
   // ─── QUESTION SHOW/HIDE ───────────────────────────────────────────────────────
@@ -361,6 +392,8 @@
     currentIndex   = index
     locked         = false
     selectedLogoId = null
+
+    if (timeoutOverlay) hide(timeoutOverlay)
 
     var qEl = currentQ()
     if (!qEl) return
@@ -399,6 +432,7 @@
 
   function endQuiz () {
     stopTimer()
+    if (timeoutOverlay) hide(timeoutOverlay)
     var resultsEl = qel('results')
     if (resultsEl) {
       hide(screenQuiz)
@@ -617,6 +651,17 @@
           if (locked || placed) { event.interaction.stop(); return }
           prop.setAttribute('data-drag-active', 'true')  // set BEFORE lift — CSS scale applies from frame 1
           liftPropToBody(prop)
+
+          // Center the prop's layout box under the pointer so dragging
+          // feels anchored to the cursor regardless of where the user grabbed.
+          var w          = parseFloat(prop.style.width)  || prop.offsetWidth
+          var h          = parseFloat(prop.style.height) || prop.offsetHeight
+          var originLeft = parseFloat(prop.dataset.originLeft) || 0
+          var originTop  = parseFloat(prop.dataset.originTop)  || 0
+          var initX      = event.clientX - originLeft - w / 2
+          var initY      = event.clientY - originTop  - h / 2
+          setPropPos(prop, initX, initY)
+
           qEl.classList.add('is-dragging')               // CSS hook: .is-dragging .wih1_drop-zone_dragging
           qEl.querySelectorAll('.wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
           if (instrEl) instrEl.style.display = 'none'
@@ -748,6 +793,16 @@
 
   function init () {
     window.__wih1DragDropReady = true
+
+    injectDragStyles()
+
+    // Wire up timeout overlay next button
+    if (timeoutNextBtn) {
+      timeoutNextBtn.addEventListener('click', function () {
+        if (timeoutOverlay) hide(timeoutOverlay)
+        goNext()
+      })
+    }
 
     // Initialise progress display
     updateProgress()
