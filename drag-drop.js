@@ -91,15 +91,18 @@
 
   // ─── DROP-ZONE DRAG STYLES ────────────────────────────────────────────────────
   // Injected once at boot; uses data-attributes set by the drag engine.
+  //
+  // The dashed SVG border is applied by injecting a real <div> into each zone
+  // via ondropactivate / ondropdeactivate.  This is immune to Webflow overriding
+  // `position: relative` (which breaks the ::before approach).
+
+  var _svgBorderUrl = ''   // set once in injectDragStyles; read by initQuestion
 
   function injectDragStyles () {
     if (document.getElementById('wih1-drag-drop-styles')) return
 
-    // Encode the exact SVG from the design spec as a background-image.
-    // Using a ::before pseudo-element (position:absolute) means zero layout shift.
-    // vector-effect="non-scaling-stroke" keeps stroke-width at 2px at any element size.
-    // The gradient ID is scoped to avoid collisions with other page SVGs.
-    var svgBorder = 'url("data:image/svg+xml,' + encodeURIComponent(
+    // Build the data-URL once and stash it for the JS injection below.
+    _svgBorderUrl = 'url("data:image/svg+xml,' + encodeURIComponent(
       "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 246 134' preserveAspectRatio='none'>" +
         "<defs>" +
           "<linearGradient id='wih1dg' x1='123' y1='31.9' x2='123' y2='102.1' gradientUnits='userSpaceOnUse'>" +
@@ -116,19 +119,7 @@
     var style = document.createElement('style')
     style.id = 'wih1-drag-drop-styles'
     style.textContent = [
-      /* Drop zones need a stacking context for the ::before overlay */
-      '.wih1_drop-zone_wrap { position: relative; }',
-      /* Dashed border via absolutely-positioned ::before — no layout shift */
-      '.is-dragging .wih1_drop-zone_wrap[data-drag-over="ready"]::before {',
-      '  content: "";',
-      '  position: absolute;',
-      '  inset: 0;',
-      '  pointer-events: none;',
-      '  background-image: ' + svgBorder + ';',
-      '  background-size: 100% 100%;',
-      '  z-index: 1;',
-      '}',
-      /* Gradient bg + outline (not border) when prop is over THIS zone — no layout shift */
+      /* Gradient bg + outline when prop is hovering over THIS zone */
       '.wih1_drop-zone_wrap[data-drag-over="true"] {',
       '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
       '  outline: 2px solid #FAFAFD !important;',
@@ -136,6 +127,22 @@
       '}',
     ].join('\n')
     document.head.appendChild(style)
+  }
+
+  // Inject / remove the SVG dashed-border div on a zone element.
+  function addZoneBorder (zone) {
+    if (zone.querySelector('.wih1-zone-border')) return
+    var div = document.createElement('div')
+    div.className = 'wih1-zone-border'
+    div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:1;' +
+                        'background-image:' + _svgBorderUrl + ';background-size:100% 100%;'
+    zone.style.position = 'relative'   // force stacking context regardless of Webflow CSS
+    zone.appendChild(div)
+  }
+  function removeZoneBorder (zone) {
+    var div = zone.querySelector('.wih1-zone-border')
+    if (div) div.parentNode.removeChild(div)
+    zone.style.position = ''
   }
 
   // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -391,8 +398,26 @@
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   false)
 
-    // Show timeout overlay popup (mirrors quiz.js behaviour)
-    if (timeoutOverlay) show(timeoutOverlay)
+    // Populate and show the timeout overlay
+    if (timeoutOverlay) {
+      // Answer name → [data-quiz-element="answer"] span
+      var answerTextEl = qel('answer', timeoutOverlay)
+      if (answerTextEl) answerTextEl.textContent = getCorrectName(qEl)
+
+      // Answer logo → [data-quiz-element="timeout-answer-logo"] img
+      var answerLogoEl = timeoutOverlay.querySelector('[data-quiz-element="timeout-answer-logo"]')
+      if (answerLogoEl) {
+        var correctLogoId  = getCorrectLogoId(qEl)
+        var correctLogoImg = qEl.querySelector('[data-logo-id="' + correctLogoId + '"]')
+        if (correctLogoImg) {
+          answerLogoEl.src = correctLogoImg.src
+          var srcset = correctLogoImg.getAttribute('srcset')
+          if (srcset) answerLogoEl.setAttribute('srcset', srcset)
+        }
+      }
+
+      show(timeoutOverlay)
+    }
   }
 
   // ─── QUESTION SHOW/HIDE ───────────────────────────────────────────────────────
@@ -723,13 +748,14 @@
 
         ondropactivate: function () {
           zone.setAttribute('data-drag-over', 'ready')
+          addZoneBorder(zone)
         },
         ondragenter: function () {
           zone.setAttribute('data-drag-over', 'true')
           prop.classList.add('prop--over-zone')
         },
         ondragleave: function () {
-          zone.setAttribute('data-drag-over', 'ready')  // restore dashed-border state; 'ready' removed by ondropdeactivate
+          zone.setAttribute('data-drag-over', 'ready')
           prop.classList.remove('prop--over-zone')
         },
         ondrop: function () {
@@ -774,6 +800,7 @@
         },
         ondropdeactivate: function () {
           zone.removeAttribute('data-drag-over')
+          removeZoneBorder(zone)
         }
       })
 
