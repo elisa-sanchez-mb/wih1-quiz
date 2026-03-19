@@ -127,8 +127,12 @@
     var style = document.createElement('style')
     style.id = 'wih1-drag-drop-styles'
     style.textContent = [
-      /* Gradient bg + outline when prop is hovering over THIS zone */
-      '.wih1_drop-zone_wrap[data-drag-over="true"] {',
+      /* Gradient bg + outline when prop is hovering over THIS zone.            */
+      /* Applied to both the zone wrap AND the previewWrap inside it so one of  */
+      /* them is guaranteed to be the visible element in any HTML structure.    */
+      '.wih1_drop-zone_wrap[data-drag-over="true"],',
+      '.wih1_drop-zone_wrap[data-drag-over="true"] [data-drop-element="previewWrap"],',
+      '.wih1_drop-zone_wrap[data-drag-over="true"] .wih1_drop_preview {',
       '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
       '  outline: 2px solid #FAFAFD !important;',
       '  outline-offset: -1px !important;',
@@ -137,20 +141,25 @@
     document.head.appendChild(style)
   }
 
-  // Inject / remove the SVG dashed-border div on a zone element.
+  // Inject / remove the SVG dashed-border div.
+  // Targets the previewWrap inside the zone (the visible drop slot) so the
+  // border is guaranteed to appear on top of any Webflow background/z-index.
+  // Falls back to the zone itself if no previewWrap is found.
   function addZoneBorder (zone) {
-    if (zone.querySelector('.wih1-zone-border')) return
+    var target = zone.querySelector('[data-drop-element="previewWrap"]') || zone
+    if (target.querySelector('.wih1-zone-border')) return
     var div = document.createElement('div')
     div.className = 'wih1-zone-border'
-    div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:1;' +
+    div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:100;' +
                         'background-image:' + _svgBorderUrl + ';background-size:100% 100%;'
-    zone.style.position = 'relative'   // force stacking context regardless of Webflow CSS
-    zone.appendChild(div)
+    target.style.position = 'relative'
+    target.appendChild(div)
   }
   function removeZoneBorder (zone) {
-    var div = zone.querySelector('.wih1-zone-border')
+    var target = zone.querySelector('[data-drop-element="previewWrap"]') || zone
+    var div = target.querySelector('.wih1-zone-border')
     if (div) div.parentNode.removeChild(div)
-    zone.style.position = ''
+    target.style.position = ''
   }
 
   // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -427,11 +436,19 @@
       var answerLogoEl = timeoutOverlay.querySelector('[data-quiz-element="timeout-answer-logo"]')
       if (answerLogoEl) {
         var correctLogoId  = getCorrectLogoId(qEl)
-        var correctLogoImg = qEl.querySelector('[data-logo-id="' + correctLogoId + '"]')
+        // Narrow to [data-quiz-element="answer"] so we get the logo image, not zone bg elements
+        var correctLogoImg = qEl.querySelector('[data-logo-id="' + correctLogoId + '"][data-quiz-element="answer"]')
+                          || qEl.querySelector('[data-logo-id="' + correctLogoId + '"]')
         if (correctLogoImg) {
-          answerLogoEl.src = correctLogoImg.src
-          var srcset = correctLogoImg.getAttribute('srcset')
-          if (srcset) answerLogoEl.setAttribute('srcset', srcset)
+          // Use getAttribute (raw attribute) rather than .src (resolved absolute URL)
+          // so that empty-src Webflow images don't overwrite with the page URL
+          var logoSrc    = correctLogoImg.getAttribute('src')
+          var logoSrcset = correctLogoImg.getAttribute('srcset')
+          var logoSizes  = correctLogoImg.getAttribute('sizes')
+          if (logoSrc)    answerLogoEl.src = logoSrc
+          if (logoSrcset) answerLogoEl.setAttribute('srcset', logoSrcset)
+          else            answerLogoEl.removeAttribute('srcset')
+          if (logoSizes)  answerLogoEl.setAttribute('sizes',  logoSizes)
         }
       }
 
