@@ -184,6 +184,13 @@
     return name ? name.charAt(0).toUpperCase() + name.slice(1) : name
   }
 
+  function getShowName (qEl) {
+    // data-show can be set on the question wrapper element or on the prop itself
+    if (qEl.dataset.show) return qEl.dataset.show
+    var prop = qEl.querySelector('.quiz-prop')
+    return (prop && prop.dataset.show) ? prop.dataset.show : ''
+  }
+
   // ─── COUNT-UP ANIMATION (matches quiz.js implementation) ─────────────────────
 
   function countUp (el, from, to, duration) {
@@ -318,9 +325,9 @@
       feedbackWrap.setAttribute('data-feedback-correct', isCorrect ? 'true' : 'false')
     }
     if (feedbackAnswer) {
-      feedbackAnswer.textContent = isCorrect
-        ? 'Spot on! That’s right, it’s on ' + getCorrectName(qEl)
-        : 'Not quite. The correct answer is ' + getCorrectName(qEl)
+      var showName     = getShowName(qEl)
+      var platformName = getCorrectName(qEl)
+      feedbackAnswer.textContent = ‘This prop is from ‘ + showName + ‘, available on ‘ + platformName + ‘.’
     }
   }
 
@@ -403,7 +410,11 @@
 
     // Populate and show the timeout overlay
     if (timeoutOverlay) {
-      // Answer name → [data-quiz-element="answer"] span
+      // Show name → [data-quiz-element="show"] span
+      var showTextEl = qel('show', timeoutOverlay)
+      if (showTextEl) showTextEl.textContent = getShowName(qEl)
+
+      // Platform name → [data-quiz-element="answer"] span
       var answerTextEl = qel('answer', timeoutOverlay)
       if (answerTextEl) answerTextEl.textContent = getCorrectName(qEl)
 
