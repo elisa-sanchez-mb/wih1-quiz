@@ -142,24 +142,30 @@
   }
 
   // Inject / remove the SVG dashed-border div.
-  // Targets the previewWrap inside the zone (the visible drop slot) so the
-  // border is guaranteed to appear on top of any Webflow background/z-index.
-  // Falls back to the zone itself if no previewWrap is found.
-  function addZoneBorder (zone) {
-    var target = zone.querySelector('[data-drop-element="previewWrap"]') || zone
-    if (target.querySelector('.wih1-zone-border')) return
+  // Adds to BOTH the zone wrap and its previewWrap so the border appears
+  // regardless of which element Webflow renders as the visual surface.
+  function _addBorderToEl (el) {
+    if (!el || el.querySelector('.wih1-zone-border')) return
     var div = document.createElement('div')
     div.className = 'wih1-zone-border'
     div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:100;' +
                         'background-image:' + _svgBorderUrl + ';background-size:100% 100%;'
-    target.style.position = 'relative'
-    target.appendChild(div)
+    el.style.position = 'relative'
+    el.appendChild(div)
+  }
+  function _removeBorderFromEl (el) {
+    if (!el) return
+    var div = el.querySelector('.wih1-zone-border')
+    if (div) div.parentNode.removeChild(div)
+    el.style.position = ''
+  }
+  function addZoneBorder (zone) {
+    _addBorderToEl(zone)
+    _addBorderToEl(zone.querySelector('[data-drop-element="previewWrap"]'))
   }
   function removeZoneBorder (zone) {
-    var target = zone.querySelector('[data-drop-element="previewWrap"]') || zone
-    var div = target.querySelector('.wih1-zone-border')
-    if (div) div.parentNode.removeChild(div)
-    target.style.position = ''
+    _removeBorderFromEl(zone)
+    _removeBorderFromEl(zone.querySelector('[data-drop-element="previewWrap"]'))
   }
 
   // ─── STATE ───────────────────────────────────────────────────────────────────
