@@ -821,7 +821,52 @@
 
     injectDragStyles()
 
-    // Wire up timeout overlay next button
+    var splashEl      = qel('splash')
+    var instrScreenEl = qel('screen-instructions')
+    var resultsEl     = qel('results')
+    var hasGate       = splashEl || instrScreenEl
+
+    // ── Initial screen state ───────────────────────────────────────────────────
+    // Webflow's published HTML leaves screenQuiz and results with
+    // data-visibility="1".  Hide everything non-splash on load.
+    hide(screenQuiz)
+    if (timerWrap)      hide(timerWrap)
+    if (resultsEl)      hide(resultsEl)
+    if (timeoutOverlay) hide(timeoutOverlay)
+    // Splash has no data-visibility in Webflow so it shows by default.
+    // If there's no gate at all, show the quiz immediately.
+    if (!hasGate) {
+      show(screenQuiz)
+      if (timerWrap) show(timerWrap)
+    }
+
+    // ── Splash → Instructions (or Quiz) ───────────────────────────────────────
+    var startGameBtn = document.querySelector('[data-quiz-start-game]')
+    if (startGameBtn) {
+      startGameBtn.addEventListener('click', function () {
+        if (splashEl) hide(splashEl)
+        if (instrScreenEl) {
+          show(screenQuiz)          // show the container so instructions are visible
+          show(instrScreenEl)
+        } else {
+          show(screenQuiz)
+          if (timerWrap) show(timerWrap)
+          startTimer(false)
+        }
+      })
+    }
+
+    // ── Instructions → Quiz ───────────────────────────────────────────────────
+    var instrBtn = qel('instructions-btn')
+    if (instrBtn) {
+      instrBtn.addEventListener('click', function () {
+        hide(instrScreenEl)
+        if (timerWrap) show(timerWrap)
+        startTimer(false)
+      })
+    }
+
+    // ── Timeout overlay next button ───────────────────────────────────────────
     if (timeoutNextBtn) {
       timeoutNextBtn.addEventListener('click', function () {
         if (timeoutOverlay) hide(timeoutOverlay)
@@ -836,9 +881,7 @@
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   true)
 
-    // Load first question — no timer until user is ready
-    // If there's no splash or instructions screen, start the timer immediately
-    var hasGate = qel('splash') || qel('screen-instructions')
+    // Pre-load q1 (sets up interact.js bindings); timer starts via button handlers above
     loadQuestion(0, !hasGate)
   }
 
