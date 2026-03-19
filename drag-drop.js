@@ -332,7 +332,7 @@
     if (feedbackAnswer) {
       var showName     = getShowName(qEl)
       var platformName = getCorrectName(qEl)
-      feedbackAnswer.textContent = ‘This prop is from ‘ + showName + ‘, available on ‘ + platformName + ‘.’
+      feedbackAnswer.textContent = 'This prop is from ' + showName + ', available on ' + platformName + '.'
     }
   }
 
