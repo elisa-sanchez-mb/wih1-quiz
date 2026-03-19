@@ -169,8 +169,9 @@
     var logoId = getCorrectLogoId(qEl)
     if (!logoId) return ''
     var el = qEl.querySelector('[data-logo-id="' + logoId + '"]')
-    // Use alt text, a data-name attribute, or fall back to the raw id
-    return el ? (el.getAttribute('alt') || el.dataset.name || logoId) : logoId
+    // Use alt text, a data-name attribute, or fall back to the raw id; always capitalise first letter
+    var name = el ? (el.getAttribute('alt') || el.dataset.name || logoId) : logoId
+    return name ? name.charAt(0).toUpperCase() + name.slice(1) : name
   }
 
   // ─── COUNT-UP ANIMATION (matches quiz.js implementation) ─────────────────────
