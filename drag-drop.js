@@ -87,6 +87,9 @@
     timerText:       qel('timer-text'),
     maxScoreDisplay: qel('max-score-display'),
     finalScore:      qel('final-score'),
+    resultsHeadline: qel('results-headline'),
+    resultsMessage:  qel('results-message'),
+    finalScoreInput: qel('final-score-input'),
   }
 
   // ─── DROP-ZONE DRAG STYLES ────────────────────────────────────────────────────
@@ -469,6 +472,41 @@
     if (withTimer) startTimer(index > 0)
   }
 
+  // ─── SCORE INPUT LOCK ────────────────────────────────────────────────────────
+  // Sets the final-score-input value and makes it tamper-resistant:
+  //   • readonly attr  → blocks UI editing
+  //   • Object.defineProperty → makes element.value = x a no-op in the console
+
+  var _nativeInputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+
+  function lockScoreInput (score) {
+    var input = UI.finalScoreInput
+    if (!input) return
+    var strVal = String(score)
+    _nativeInputSetter.call(input, strVal)
+    input.setAttribute('readonly', '')
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get: function () { return strVal },
+      set: function () {}
+    })
+    if (input._lockObserver) input._lockObserver.disconnect()
+    input._lockObserver = new MutationObserver(function () {
+      if (!input.hasAttribute('readonly')) input.setAttribute('readonly', '')
+      _nativeInputSetter.call(input, strVal)
+    })
+    input._lockObserver.observe(input, { attributes: true })
+  }
+
+  function unlockScoreInput () {
+    var input = UI.finalScoreInput
+    if (!input) return
+    if (input._lockObserver) { input._lockObserver.disconnect(); input._lockObserver = null }
+    delete input.value
+    _nativeInputSetter.call(input, '')
+    input.removeAttribute('readonly')
+  }
+
   // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 
   function goNext () {
@@ -482,15 +520,29 @@
 
   function endQuiz () {
     stopTimer()
+    hide(screenQuiz)
+    if (timerWrap)      hide(timerWrap)
     if (timeoutOverlay) hide(timeoutOverlay)
+
     var resultsEl = qel('results')
-    if (resultsEl) {
-      hide(screenQuiz)
-      if (timerWrap) hide(timerWrap)
-      show(resultsEl)
-      if (UI.finalScore) {
-        setTimeout(function () { countUp(UI.finalScore, 0, totalScore, 1000) }, 600)
-      }
+    if (!resultsEl) return
+
+    // Score-based copy — mirrors quiz.js endQuiz exactly
+    var isZeroScore = totalScore === 0
+    resultsEl.setAttribute('data-zero-score', isZeroScore ? 'true' : 'false')
+    if (isZeroScore) {
+      if (UI.resultsHeadline) UI.resultsHeadline.textContent = 'That was a tough one.'
+      if (UI.resultsMessage)  UI.resultsMessage.textContent  = 'No points this time, but you can replay the game and improve your score.'
+    } else if (totalScore < 75) {
+      if (UI.resultsHeadline) UI.resultsHeadline.textContent = 'A promising start'
+      if (UI.resultsMessage)  UI.resultsMessage.textContent  = 'Can you score more points?'
+    }
+    // score >= 75: Webflow's default headline/message is used — no override needed
+
+    lockScoreInput(totalScore)
+    show(resultsEl)
+    if (UI.finalScore) {
+      setTimeout(function () { countUp(UI.finalScore, 0, totalScore, 1000) }, 600)
     }
   }
 
@@ -841,6 +893,40 @@
     })
   }
 
+  // ─── SPLASH ANIMATION ────────────────────────────────────────────────────────
+  // Mirrors quiz.js animateSplash().  Queries both the full Webflow class name
+  // (csg-design-system---makebuild-- prefix) and the shorthand name so this
+  // works regardless of which naming convention is used on the page.
+
+  function animateSplash () {
+    var splashEl = qel('splash')
+    if (!splashEl) return
+    var colLeft  = splashEl.querySelector('.csg-design-system---makebuild--wih1-splash_col-left')  ||
+                   splashEl.querySelector('.wih1-splash_col-left')
+    var colRight = splashEl.querySelector('.csg-design-system---makebuild--wih1-splash_col-right') ||
+                   splashEl.querySelector('.wih1-splash_col-right')
+    ;[colLeft, colRight].forEach(function (col) {
+      if (!col) return
+      col.style.opacity         = '0'
+      col.style.transform       = 'translateY(20%)'
+      col.style.transition      = 'none'
+      col.style.transitionDelay = '0s'
+    })
+    splashEl.getBoundingClientRect()   // force reflow before applying transitions
+    if (colLeft) {
+      colLeft.style.transition      = 'opacity 0.6s ease, transform 0.6s ease'
+      colLeft.style.transitionDelay = '0s'
+      colLeft.style.opacity         = '1'
+      colLeft.style.transform       = 'translateY(0)'
+    }
+    if (colRight) {
+      colRight.style.transition      = 'opacity 0.6s ease, transform 0.6s ease'
+      colRight.style.transitionDelay = '0.12s'
+      colRight.style.opacity         = '1'
+      colRight.style.transform       = 'translateY(0)'
+    }
+  }
+
   // ─── BOOT ─────────────────────────────────────────────────────────────────────
 
   function init () {
@@ -871,11 +957,27 @@
     var startGameBtn = document.querySelector('[data-quiz-start-game]')
     if (startGameBtn) {
       startGameBtn.addEventListener('click', function () {
-        if (splashEl) hide(splashEl)
         if (instrScreenEl) {
-          show(screenQuiz)          // show the container so instructions are visible
+          // Animate instructions card in — mirrors quiz.js onStartGame()
+          var card = instrScreenEl.querySelector('.csg-design-system---makebuild--wih1-instructions_card') ||
+                     instrScreenEl.querySelector('.wih1-instructions_card')
+          if (card) {
+            card.style.opacity         = '0'
+            card.style.transform       = 'translateY(30%)'
+            card.style.transition      = 'none'
+            card.style.transitionDelay = '0s'
+          }
+          if (splashEl) hide(splashEl)
+          show(screenQuiz)
           show(instrScreenEl)
+          instrScreenEl.getBoundingClientRect()   // force reflow
+          if (card) {
+            card.style.transition = 'opacity 0.5s ease, transform 0.5s ease'
+            card.style.opacity    = '1'
+            card.style.transform  = 'translateY(0)'
+          }
         } else {
+          if (splashEl) hide(splashEl)
           show(screenQuiz)
           if (timerWrap) show(timerWrap)
           startTimer(false)
@@ -910,6 +1012,19 @@
 
     // Pre-load q1 (sets up interact.js bindings); timer starts via button handlers above
     loadQuestion(0, !hasGate)
+
+    // Animate splash columns on load (mirrors quiz.js setBaseline → animateSplash)
+    animateSplash()
+
+    // Hide try-again-wrap once the results form is submitted
+    var resultsElForForm = qel('results')
+    if (resultsElForForm) {
+      var tryAgainWrap = qel('try-again-wrap', resultsElForForm)
+      var resultsForm  = resultsElForForm.querySelector('form')
+      if (resultsForm && tryAgainWrap) {
+        resultsForm.addEventListener('submit', function () { hide(tryAgainWrap) })
+      }
+    }
   }
 
   waitForInteract(init)
