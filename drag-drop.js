@@ -309,7 +309,7 @@
     }
     if (feedbackAnswer) {
       feedbackAnswer.textContent = isCorrect
-        ? 'Correct! +' + points + ' points'
+        ? 'Spot on! That’s right, it’s on ' + getCorrectName(qEl)
         : 'Not quite. The correct answer is ' + getCorrectName(qEl)
     }
   }
