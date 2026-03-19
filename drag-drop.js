@@ -43,10 +43,15 @@
     return Array.from((root || document).querySelectorAll('[data-quiz-element="' + name + '"]'))
   }
   function show (node) {
-    if (node) { node.setAttribute('data-visibility', '1'); node.removeAttribute('hidden') }
+    if (!node) return
+    node.setAttribute('data-visibility', '1')
+    node.removeAttribute('hidden')
+    node.style.display = ''        // clear any inline display:none set by hide()
   }
   function hide (node) {
-    if (node) node.setAttribute('data-visibility', '0')
+    if (!node) return
+    node.setAttribute('data-visibility', '0')
+    node.style.display = 'none'   // inline style overrides CSS + Webflow interactions
   }
   function setDisabled (btn, disabled) {
     if (!btn) return
