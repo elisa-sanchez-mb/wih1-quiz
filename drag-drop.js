@@ -1038,6 +1038,20 @@
     }
   }
 
+  // ─── EARLY VISIBILITY SETUP ──────────────────────────────────────────────────
+  // Run synchronously — before waitForInteract starts polling — so Webflow's
+  // default data-visibility="1" screens never flash visible on page load.
+  // init() repeats this logic once interact.js is ready; the second pass is a
+  // harmless no-op since the elements are already in the correct state.
+  hide(screenQuiz)
+  if (timerWrap)      hide(timerWrap)
+  hide(qel('results'))
+  if (timeoutOverlay) hide(timeoutOverlay)
+  if (!qel('splash') && !qel('screen-instructions')) {
+    show(screenQuiz)
+    if (timerWrap) show(timerWrap)
+  }
+
   waitForInteract(init)
 
 })() // end IIFE
