@@ -430,6 +430,7 @@
     var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
     if (reveal) {
       reveal.style.display = 'block'   // force override any CSS display:none from Webflow designer
+      reveal.style.opacity = '1'       // force override any CSS opacity:0 from Webflow designer
       reveal.setAttribute('data-visibility', '1')
       reveal.removeAttribute('hidden')
     }
