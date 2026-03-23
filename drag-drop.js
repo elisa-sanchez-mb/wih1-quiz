@@ -141,7 +141,7 @@
       /* them is guaranteed to be the visible element in any HTML structure.    */
       '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"],',
       '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] [data-drop-element="previewWrap"],',
-      '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] .wih1_drop_preview {',
+      '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] .csg-design-system---makebuild--wih1_drop_preview {',
       '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
       '  outline: 2px solid #FAFAFD !important;',
       '  outline-offset: -1px !important;',
@@ -203,7 +203,7 @@
     // Use the value cached at initQuestion time (before the prop may have been
     // reparented to document.body by liftPropToBody), so this always resolves.
     if (qEl.dataset.wih1Correct) return qEl.dataset.wih1Correct
-    var prop = qEl.querySelector('.quiz-prop')
+    var prop = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
     return prop ? prop.dataset.correct : null
   }
 
@@ -767,6 +767,11 @@
     // ── Reset prop (CSS controls opacity via data-drag-active) ─────────────────
     resetProp(prop)
     prop.removeAttribute('data-drag-active')
+    prop.style.display = ''   // clear any display:none left by a previous onSubmit
+
+    // ── Hide reveal image so it doesn't intercept drag events ──────────────────
+    var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
+    if (reveal) hide(reveal)
 
     // ── Reset instructions overlay ─────────────────────────────────────────────
     if (instrEl) instrEl.style.display = ''
