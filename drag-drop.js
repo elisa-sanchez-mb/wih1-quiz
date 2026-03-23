@@ -59,6 +59,15 @@
     btn.setAttribute('data-disabled', disabled ? 'true' : 'false')
   }
 
+  // Fisher-Yates shuffle — mutates the array in place and returns it
+  function shuffle (arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1))
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp
+    }
+    return arr
+  }
+
   // ─── CONFIGURATION ───────────────────────────────────────────────────────────
 
   var screenQuiz = qel('screen-dragdrop') || qel('screen-quiz')
@@ -145,7 +154,8 @@
   // Adds to BOTH the zone wrap and its previewWrap so the border appears
   // regardless of which element Webflow renders as the visual surface.
   function _addBorderToEl (el) {
-    if (!el || el.querySelector('.wih1-zone-border')) return
+    // Use :scope > to guard against finding a border nested inside a child element
+    if (!el || el.querySelector(':scope > .wih1-zone-border')) return
     var div = document.createElement('div')
     div.className = 'wih1-zone-border'
     div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:100;' +
@@ -155,7 +165,9 @@
   }
   function _removeBorderFromEl (el) {
     if (!el) return
-    var div = el.querySelector('.wih1-zone-border')
+    // Use :scope > so we only remove the border appended directly to this element,
+    // not a border that lives inside a child (e.g. previewWrap inside zone)
+    var div = el.querySelector(':scope > .wih1-zone-border')
     if (div) div.parentNode.removeChild(div)
     el.style.position = ''
   }
@@ -412,6 +424,11 @@
     showFeedback(qEl, isCorrect, points)
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   false)
+
+    var prop = qEl.querySelector('.quiz-prop')
+    if (prop) hide(prop)
+    var reveal = qEl.querySelector('.quiz-show-reveal')
+    if (reveal) show(reveal)
   }
 
   // ─── TIMEOUT ──────────────────────────────────────────────────────────────────
@@ -768,7 +785,17 @@
       }
       zone.removeAttribute('data-drag-over')
       zone.removeAttribute('data-filled')
+      zone.style.opacity    = ''
+      zone.style.transition = ''
     })
+
+    // ── Shuffle logo / drop-zone order ─────────────────────────────────────────
+    var zoneEls = Array.from(qEl.querySelectorAll('.wih1_drop-zone_wrap'))
+    if (zoneEls.length > 1) {
+      var zonesParent = zoneEls[0].parentNode
+      shuffle(zoneEls)
+      zoneEls.forEach(function (z) { zonesParent.appendChild(z) })
+    }
 
     // ── Tear down stale interact.js bindings ───────────────────────────────────
     try { interact(prop).unset() } catch (_) {}
@@ -857,6 +884,15 @@
 
           placed         = true
           selectedLogoId = zone.dataset.dropBg
+          zone.setAttribute('data-filled', 'true')
+
+          // Dim all other (empty) drop zones to 50% opacity
+          qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (z) {
+            if (z !== zone) {
+              z.style.transition = 'opacity 0.3s ease'
+              z.style.opacity    = '0.5'
+            }
+          })
 
           // Snap prop to previewWrap centre, then reveal the existing preview img
           var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
@@ -923,6 +959,13 @@
             btn.setAttribute('data-selected', 'false')
           })
 
+          // Restore zone opacities
+          zone.removeAttribute('data-filled')
+          qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (z) {
+            z.style.transition = 'opacity 0.3s ease'
+            z.style.opacity    = ''
+          })
+
           // Reset state so the user can drag again
           selectedLogoId = null
           placed         = false
@@ -970,6 +1013,9 @@
 
   function init () {
     window.__wih1DragDropReady = true
+
+    // Randomise question order on every play-through
+    shuffle(questionEls)
 
     injectDragStyles()
 
