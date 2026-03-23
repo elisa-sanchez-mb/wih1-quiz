@@ -139,9 +139,9 @@
       /* Gradient bg + outline when prop is hovering over THIS zone.            */
       /* Applied to both the zone wrap AND the previewWrap inside it so one of  */
       /* them is guaranteed to be the visible element in any HTML structure.    */
-      '.wih1_drop-zone_wrap[data-drag-over="true"],',
-      '.wih1_drop-zone_wrap[data-drag-over="true"] [data-drop-element="previewWrap"],',
-      '.wih1_drop-zone_wrap[data-drag-over="true"] .wih1_drop_preview {',
+      '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"],',
+      '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] [data-drop-element="previewWrap"],',
+      '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] .wih1_drop_preview {',
       '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
       '  outline: 2px solid #FAFAFD !important;',
       '  outline-offset: -1px !important;',
@@ -157,7 +157,7 @@
     // Use :scope > to guard against finding a border nested inside a child element
     if (!el || el.querySelector(':scope > .wih1-zone-border')) return
     var div = document.createElement('div')
-    div.className = 'wih1-zone-border'
+    div.className = 'csg-design-system---makebuild--wih1-zone-border'
     div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:100;' +
                         'background-image:' + _svgBorderUrl + ';background-size:100% 100%;'
     el.style.position = 'relative'
@@ -167,7 +167,7 @@
     if (!el) return
     // Use :scope > so we only remove the border appended directly to this element,
     // not a border that lives inside a child (e.g. previewWrap inside zone)
-    var div = el.querySelector(':scope > .wih1-zone-border')
+    var div = el.querySelector(':scope > .csg-design-system---makebuild--wih1-zone-border')
     if (div) div.parentNode.removeChild(div)
     el.style.position = ''
   }
@@ -219,7 +219,7 @@
   function getShowName (qEl) {
     // data-show can be set on the question wrapper element or on the prop itself
     if (qEl.dataset.show) return qEl.dataset.show
-    var prop = qEl.querySelector('.quiz-prop')
+    var prop = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
     return (prop && prop.dataset.show) ? prop.dataset.show : ''
   }
 
@@ -387,7 +387,7 @@
     // Mark the filled drop zone's remove button with correct/incorrect feedback
     // so the X icon swaps to the tick or cross icon via CSS
     if (selectedLogoId) {
-      qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
         if (zone.dataset.dropBg === selectedLogoId) {
           var removeEl = zone.querySelector('[data-drop-element="remove"]')
           if (removeEl) {
@@ -425,9 +425,9 @@
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   false)
 
-    var prop = qEl.querySelector('.quiz-prop')
+    var prop = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
     if (prop) hide(prop)
-    var reveal = qEl.querySelector('.quiz-show-reveal')
+    var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
     if (reveal) show(reveal)
   }
 
@@ -752,9 +752,9 @@
   function initQuestion (qEl) {
     if (!qEl) return
 
-    var prop    = qEl.querySelector('.quiz-prop')       // draggable; CSS ghost via data-drag-active
-    var dragImg = qEl.querySelector('.quiz_drag_img')   // fixed background image — JS never moves it
-    var instrEl = qEl.querySelector('.drag_drop_img_instructions')
+    var prop    = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')       // draggable; CSS ghost via data-drag-active
+    var dragImg = qEl.querySelector('.csg-design-system---makebuild--quiz_drag_img')   // fixed background image — JS never moves it
+    var instrEl = qEl.querySelector('.csg-design-system---makebuild--drag_drop_img_instructions')
     if (!prop) return
 
     // Cache correct answer before any reparenting
@@ -773,7 +773,7 @@
 
     // ── Reset drop zones ───────────────────────────────────────────────────────
     qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
-      var previewImg = zone.querySelector('.wih1_drop_preview_img')
+      var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
       var removeEl   = zone.querySelector('[data-drop-element="remove"]')
       if (previewImg) {
         previewImg.src           = ''
@@ -790,7 +790,7 @@
     })
 
     // ── Shuffle logo / drop-zone order ─────────────────────────────────────────
-    var zoneEls = Array.from(qEl.querySelectorAll('.wih1_drop-zone_wrap'))
+    var zoneEls = Array.from(qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap'))
     if (zoneEls.length > 1) {
       var zonesParent = zoneEls[0].parentNode
       shuffle(zoneEls)
@@ -799,7 +799,7 @@
 
     // ── Tear down stale interact.js bindings ───────────────────────────────────
     try { interact(prop).unset() } catch (_) {}
-    qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+    qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
       try { interact(zone).unset() } catch (_) {}
     })
 
@@ -830,8 +830,8 @@
           var initY      = event.clientY - originTop  - h / 2
           setPropPos(prop, initX, initY)
 
-          qEl.classList.add('is-dragging')               // CSS hook: .is-dragging .wih1_drop-zone_dragging
-          qEl.querySelectorAll('.wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
+          qEl.classList.add('csg-design-system---makebuild--is-dragging')               // CSS hook: .is-dragging .wih1_drop-zone_dragging
+          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
           if (instrEl) instrEl.style.display = 'none'
         },
         move: function (event) {
@@ -849,8 +849,8 @@
             }, SNAP_BACK_MS)
           }
           // Remove dragging state immediately on gesture end (drop or no-drop)
-          qEl.classList.remove('is-dragging')
-          qEl.querySelectorAll('.wih1_drop_preview').forEach(function (p) { p.classList.remove('is-dragging') })
+          qEl.classList.remove('csg-design-system---makebuild--is-dragging')
+          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.remove('is-dragging') })
           // Drop case: data-drag-active removed inside ondrop's setTimeout
           dropHandled = false
         }
@@ -858,10 +858,10 @@
     })
 
     // ── Drop zones (.wih1_drop-zone_wrap) ─────────────────────────────────────
-    qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+    qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
 
       interact(zone).dropzone({
-        accept:  '.quiz-prop',
+        accept:  '.csg-design-system---makebuild--quiz-prop',
         overlap: OVERLAP,
 
         ondropactivate: function () {
@@ -887,7 +887,7 @@
           zone.setAttribute('data-filled', 'true')
 
           // Dim all other (empty) drop zones to 50% opacity
-          qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (z) {
+          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
             if (z !== zone) {
               z.style.transition = 'opacity 0.3s ease'
               z.style.opacity    = '0.5'
@@ -896,7 +896,7 @@
 
           // Snap prop to previewWrap centre, then reveal the existing preview img
           var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
-          var previewImg  = zone.querySelector('.wih1_drop_preview_img')
+          var previewImg  = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
           var snapTarget  = previewWrap || zone
           snapPropToZone(prop, snapTarget)
 
@@ -941,7 +941,7 @@
           if (locked) return
 
           // Hide the preview image
-          var previewImg = zone.querySelector('.wih1_drop_preview_img')
+          var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
           if (previewImg) {
             previewImg.src           = ''
             previewImg.style.opacity = '0'
@@ -961,7 +961,7 @@
 
           // Restore zone opacities
           zone.removeAttribute('data-filled')
-          qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (z) {
+          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
             z.style.transition = 'opacity 0.3s ease'
             z.style.opacity    = ''
           })
