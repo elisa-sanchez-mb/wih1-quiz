@@ -57,6 +57,7 @@
     if (!btn) return
     btn.disabled = !!disabled
     btn.setAttribute('data-disabled', disabled ? 'true' : 'false')
+    btn.setAttribute('cc-button-disabled', disabled ? 'true' : 'false')
   }
 
   // Fisher-Yates shuffle — mutates the array in place and returns it
@@ -425,14 +426,30 @@
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   false)
 
+    var animTrans = 'opacity 650ms cubic-bezier(0.25,0.1,0.25,1), filter 650ms cubic-bezier(0.25,0.1,0.25,1)'
+
+    // Fade out prop — same animation as logos in quiz.js
     var prop = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
-    if (prop) hide(prop)
+    if (prop) {
+      prop.style.transition = animTrans
+      prop.style.opacity    = '0'
+      prop.style.filter     = 'blur(10px)'
+      setTimeout(function () { hide(prop) }, 650)
+    }
+
+    // Fade in reveal — mirror of the logo fade-in in quiz.js
     var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
     if (reveal) {
-      reveal.style.display = 'block'   // force override any CSS display:none from Webflow designer
-      reveal.style.opacity = '1'       // force override any CSS opacity:0 from Webflow designer
+      reveal.style.display    = 'block'
+      reveal.style.opacity    = '0'
+      reveal.style.filter     = 'blur(10px)'
+      reveal.style.transition = animTrans
       reveal.setAttribute('data-visibility', '1')
       reveal.removeAttribute('hidden')
+      // Force reflow so the starting state is painted before the transition begins
+      reveal.getBoundingClientRect()
+      reveal.style.opacity = '1'
+      reveal.style.filter  = 'blur(0px)'
     }
   }
 
@@ -448,7 +465,7 @@
     // Prop stays wherever it is — the locked check in the move listener
     // already stops any in-progress drag.
     setDisabled(getSubmitBtn(), true)
-    setDisabled(getNextBtn(),   false)
+    setDisabled(getNextBtn(),   true)  // timeout overlay's own button handles navigation
 
     // Populate and show the timeout overlay
     if (timeoutOverlay) {
@@ -726,6 +743,8 @@
     prop.style.height        = ''
     prop.style.zIndex        = ''
     prop.style.pointerEvents = 'auto'
+    prop.style.opacity       = ''
+    prop.style.filter        = ''
     prop.setAttribute('data-x', 0)
     prop.setAttribute('data-y', 0)
     prop.classList.remove('prop--over-zone')
