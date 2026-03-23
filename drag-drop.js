@@ -428,7 +428,11 @@
     var prop = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
     if (prop) hide(prop)
     var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
-    if (reveal) show(reveal)
+    if (reveal) {
+      reveal.style.display = 'block'   // force override any CSS display:none from Webflow designer
+      reveal.setAttribute('data-visibility', '1')
+      reveal.removeAttribute('hidden')
+    }
   }
 
   // ─── TIMEOUT ──────────────────────────────────────────────────────────────────
