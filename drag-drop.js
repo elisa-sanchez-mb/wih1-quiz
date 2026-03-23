@@ -57,7 +57,11 @@
     if (!btn) return
     btn.disabled = !!disabled
     btn.setAttribute('data-disabled', disabled ? 'true' : 'false')
-    btn.setAttribute('cc-button-disabled', disabled ? 'true' : 'false')
+    // cc-button-disabled="true" triggers Webflow's hide behaviour — always keep "false"
+    // so the button stays visible; the disabled look is handled by inline opacity below.
+    btn.setAttribute('cc-button-disabled', 'false')
+    btn.style.opacity       = disabled ? '0.5' : ''
+    btn.style.pointerEvents = disabled ? 'none' : ''
   }
 
   // Fisher-Yates shuffle — mutates the array in place and returns it
@@ -399,17 +403,22 @@
       })
     }
 
-    // Zone-level opacity feedback — mirrors quiz.js revealAnswers highlighting the correct answer:
-    //   correct zone  → full opacity (highlighted)
-    //   wrong selection → medium opacity (0.4)
-    //   other zones     → unchanged (already at 0.5 from ondrop dimming, or 1 if untouched)
+    // Zone-level opacity feedback — mirrors quiz.js revealAnswers:
+    //   correct zone    → 1   (highlighted)
+    //   wrong selection → 0.75 (medium — clearly wrong but not harsh)
+    //   all other zones → 0.5 (dimmed)
+    // Preview wraps: only the selected zone keeps its preview visible; others are hidden.
     qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
       var logoId    = zone.dataset.dropBg
       var isCorrect = logoId === correctLogoId
       var isWrong   = selectedLogoId && logoId === selectedLogoId && !isCorrect
-      if (isCorrect || isWrong) {
-        zone.style.transition = 'opacity 0.4s ease'
-        zone.style.opacity    = isCorrect ? '1' : '0.4'
+      zone.style.transition = 'opacity 0.4s ease'
+      zone.style.opacity    = isCorrect ? '1' : (isWrong ? '0.75' : '0.5')
+
+      // Hide the preview wrap for every zone except the one the prop was dropped on
+      var previewWrapEl = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_wrap')
+      if (previewWrapEl) {
+        previewWrapEl.style.display = (selectedLogoId && logoId === selectedLogoId) ? '' : 'none'
       }
     })
 
@@ -442,13 +451,18 @@
 
     var animTrans = 'opacity 650ms cubic-bezier(0.25,0.1,0.25,1), filter 650ms cubic-bezier(0.25,0.1,0.25,1)'
 
-    // Fade out prop — same animation as logos in quiz.js
-    var prop = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
+    // Fade out prop + static slot image — same animation as logos in quiz.js
+    var prop    = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
+    var dragImg = qEl.querySelector('.csg-design-system---makebuild--quiz_drag_img')
     if (prop) {
       prop.style.transition = animTrans
       prop.style.opacity    = '0'
       prop.style.filter     = 'blur(10px)'
       setTimeout(function () { hide(prop) }, 650)
+    }
+    if (dragImg) {
+      dragImg.style.transition = animTrans
+      dragImg.style.opacity    = '0'
     }
 
     // Fade in reveal — mirror of the logo fade-in in quiz.js
@@ -806,6 +820,7 @@
     resetProp(prop)
     prop.removeAttribute('data-drag-active')
     prop.style.display = ''   // clear any display:none left by a previous onSubmit
+    if (dragImg) { dragImg.style.opacity = ''; dragImg.style.transition = '' }
 
     // ── Hide reveal image so it doesn't intercept drag events ──────────────────
     var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
@@ -816,8 +831,9 @@
 
     // ── Reset drop zones ───────────────────────────────────────────────────────
     qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
-      var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
-      var removeEl   = zone.querySelector('[data-drop-element="remove"]')
+      var previewImg    = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
+      var removeEl      = zone.querySelector('[data-drop-element="remove"]')
+      var previewWrapEl = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_wrap')
       if (previewImg) {
         previewImg.src           = ''
         previewImg.style.opacity = '0'
@@ -826,6 +842,7 @@
         removeEl.style.opacity = '0'
         removeEl.removeAttribute('data-feedback-correct')
       }
+      if (previewWrapEl) previewWrapEl.style.display = ''
       zone.removeAttribute('data-drag-over')
       zone.removeAttribute('data-filled')
       zone.style.opacity    = ''
