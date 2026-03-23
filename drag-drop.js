@@ -399,6 +399,20 @@
       })
     }
 
+    // Zone-level opacity feedback — mirrors quiz.js revealAnswers highlighting the correct answer:
+    //   correct zone  → full opacity (highlighted)
+    //   wrong selection → medium opacity (0.4)
+    //   other zones     → unchanged (already at 0.5 from ondrop dimming, or 1 if untouched)
+    qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
+      var logoId    = zone.dataset.dropBg
+      var isCorrect = logoId === correctLogoId
+      var isWrong   = selectedLogoId && logoId === selectedLogoId && !isCorrect
+      if (isCorrect || isWrong) {
+        zone.style.transition = 'opacity 0.4s ease'
+        zone.style.opacity    = isCorrect ? '1' : '0.4'
+      }
+    })
+
     swapLogo(qEl, 'answer')  // no-op when initial-logo/answer-logo aren't present
   }
 
