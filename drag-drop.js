@@ -81,7 +81,7 @@
   // .wih1-quiz_item (this page's structure), deduped.
 
   var questionEls = Array.from(document.querySelectorAll(
-    '[data-quiz-element="question"], .wih1-quiz_item'
+    '[data-quiz-element="question"], .csg-design-system---makebuild--wih1-quiz_item'
   )).filter(function (el, i, arr) { return arr.indexOf(el) === i })
 
   var TOTAL_QUESTIONS = questionEls.length
@@ -89,7 +89,7 @@
 
   // ─── UI REFERENCES ───────────────────────────────────────────────────────────
 
-  var timerWrap      = document.querySelector('.wih1-timer_wrap')
+  var timerWrap      = document.querySelector('.csg-design-system---makebuild--wih1-timer_wrap')
   var timeoutOverlay = qel('timeout-overlay')
   var timeoutNextBtn = qel('timeout-next-btn')
 
@@ -155,7 +155,7 @@
   // regardless of which element Webflow renders as the visual surface.
   function _addBorderToEl (el) {
     // Use :scope > to guard against finding a border nested inside a child element
-    if (!el || el.querySelector(':scope > .wih1-zone-border')) return
+    if (!el || el.querySelector(':scope > .csg-design-system---makebuild--wih1-zone-border')) return
     var div = document.createElement('div')
     div.className = 'csg-design-system---makebuild--wih1-zone-border'
     div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:100;' +
@@ -772,7 +772,7 @@
     if (instrEl) instrEl.style.display = ''
 
     // ── Reset drop zones ───────────────────────────────────────────────────────
-    qEl.querySelectorAll('.wih1_drop-zone_wrap').forEach(function (zone) {
+    qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
       var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
       var removeEl   = zone.querySelector('[data-drop-element="remove"]')
       if (previewImg) {
