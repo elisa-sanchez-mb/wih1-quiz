@@ -141,15 +141,16 @@
     var style = document.createElement('style')
     style.id = 'wih1-drag-drop-styles'
     style.textContent = [
-      /* Gradient bg + outline when prop is hovering over THIS zone.            */
+      /* Gradient bg when prop is hovering over THIS zone.                       */
+      /* The dashed SVG border div (injected via addZoneBorder) provides the    */
+      /* 2px border — no CSS outline needed here.                               */
       /* Applied to both the zone wrap AND the previewWrap inside it so one of  */
       /* them is guaranteed to be the visible element in any HTML structure.    */
       '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"],',
       '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] [data-drop-element="previewWrap"],',
       '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] .csg-design-system---makebuild--wih1_drop_preview {',
       '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
-      '  outline: 2px solid #FAFAFD !important;',
-      '  outline-offset: -1px !important;',
+      '  outline: none !important;',
       '}',
     ].join('\n')
     document.head.appendChild(style)
