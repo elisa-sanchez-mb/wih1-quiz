@@ -132,8 +132,8 @@
           "</linearGradient>" +
         "</defs>" +
         "<g opacity='0.5'>" +
-          "<rect x='1' y='1' width='244' height='132' rx='3' fill='none' stroke='#FAFAFD' stroke-width='2' stroke-linecap='round' stroke-dasharray='8 8' vector-effect='non-scaling-stroke'/>" +
-          "<rect x='1' y='1' width='244' height='132' rx='3' fill='none' stroke='url(#wih1dg)' stroke-opacity='0.2' stroke-width='2' stroke-linecap='round' stroke-dasharray='8 8' vector-effect='non-scaling-stroke'/>" +
+          "<rect x='0.5' y='0.5' width='245' height='133' rx='3' fill='none' stroke='#FAFAFD' stroke-width='1' stroke-linecap='round' stroke-dasharray='8 8' vector-effect='non-scaling-stroke'/>" +
+          "<rect x='0.5' y='0.5' width='245' height='133' rx='3' fill='none' stroke='url(#wih1dg)' stroke-opacity='0.2' stroke-width='1' stroke-linecap='round' stroke-dasharray='8 8' vector-effect='non-scaling-stroke'/>" +
         "</g>" +
       "</svg>"
     ) + '")'
@@ -164,7 +164,7 @@
     if (!el || el.querySelector(':scope > .csg-design-system---makebuild--wih1-zone-border')) return
     var div = document.createElement('div')
     div.className = 'csg-design-system---makebuild--wih1-zone-border'
-    div.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:100;' +
+    div.style.cssText = 'position:absolute;inset:2px;pointer-events:none;z-index:100;' +
                         'background-image:' + _svgBorderUrl + ';background-size:100% 100%;'
     el.style.position = 'relative'
     el.appendChild(div)
@@ -927,20 +927,23 @@
 
         ondropactivate: function () {
           zone.setAttribute('data-drag-over', 'ready')
-          addZoneBorder(zone)
+          // Border is added only on enter, not on all zones at once
         },
         ondragenter: function () {
           zone.setAttribute('data-drag-over', 'true')
           prop.classList.add('prop--over-zone')
+          addZoneBorder(zone)
         },
         ondragleave: function () {
           zone.setAttribute('data-drag-over', 'ready')
           prop.classList.remove('prop--over-zone')
+          removeZoneBorder(zone)
         },
         ondrop: function () {
           dropHandled = true
           zone.removeAttribute('data-drag-over')
           prop.classList.remove('prop--over-zone')
+          removeZoneBorder(zone)
           if (locked) return
 
           placed         = true
