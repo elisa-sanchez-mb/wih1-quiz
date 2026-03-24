@@ -143,7 +143,7 @@
     style.textContent = [
       /* Gradient bg when prop is hovering over THIS zone.                       */
       /* The dashed SVG border div (injected via addZoneBorder) provides the    */
-      /* 2px border — no CSS outline needed here.                               */
+      /* 1px border — no CSS outline needed here.                               */
       /* Applied to both the zone wrap AND the previewWrap inside it so one of  */
       /* them is guaranteed to be the visible element in any HTML structure.    */
       '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"],',
@@ -151,6 +151,15 @@
       '.csg-design-system---makebuild--wih1_drop-zone_wrap[data-drag-over="true"] .csg-design-system---makebuild--wih1_drop_preview {',
       '  background: linear-gradient(90deg,#FF00A0 -32.13%,#7100F9 98.41%) !important;',
       '  outline: none !important;',
+      '}',
+      /* Kill Webflow's white border on the previewWrap element while dragging. */
+      /* .is-dragging is set on the question element at drag start (see start   */
+      /* listener) and removed at drag end.                                     */
+      '.csg-design-system---makebuild--is-dragging [data-drop-element="previewWrap"],',
+      '.csg-design-system---makebuild--is-dragging .csg-design-system---makebuild--wih1_drop_preview {',
+      '  border: none !important;',
+      '  outline: none !important;',
+      '  box-shadow: none !important;',
       '}',
     ].join('\n')
     document.head.appendChild(style)
@@ -927,23 +936,20 @@
 
         ondropactivate: function () {
           zone.setAttribute('data-drag-over', 'ready')
-          // Border is added only on enter, not on all zones at once
+          addZoneBorder(zone)   // show dashed border on ALL zones when drag starts
         },
         ondragenter: function () {
           zone.setAttribute('data-drag-over', 'true')
           prop.classList.add('prop--over-zone')
-          addZoneBorder(zone)
         },
         ondragleave: function () {
           zone.setAttribute('data-drag-over', 'ready')
           prop.classList.remove('prop--over-zone')
-          removeZoneBorder(zone)
         },
         ondrop: function () {
           dropHandled = true
           zone.removeAttribute('data-drag-over')
           prop.classList.remove('prop--over-zone')
-          removeZoneBorder(zone)
           if (locked) return
 
           placed         = true
