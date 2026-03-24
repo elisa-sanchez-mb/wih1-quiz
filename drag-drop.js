@@ -874,8 +874,9 @@
     })
 
     // ── Per-gesture flags ──────────────────────────────────────────────────────
-    var placed      = false  // true after a successful drop; cleared by remove
-    var dropHandled = false  // true when ondrop fired during the current gesture
+    var placed         = false  // true after a successful drop; cleared by remove
+    var dropHandled    = false  // true when ondrop fired during the current gesture
+    var activeDropZone = null   // the zone currently under the prop (set by ondragenter)
 
     // ── Draggable (quiz-prop) ──────────────────────────────────────────────────
     interact(prop).draggable({
@@ -939,14 +940,21 @@
           addZoneBorder(zone)   // show dashed border on ALL zones when drag starts
         },
         ondragenter: function () {
+          activeDropZone = zone                          // record which zone is live
           zone.setAttribute('data-drag-over', 'true')
           prop.classList.add('prop--over-zone')
         },
         ondragleave: function () {
+          if (activeDropZone === zone) activeDropZone = null  // prop left without dropping
           zone.setAttribute('data-drag-over', 'ready')
           prop.classList.remove('prop--over-zone')
         },
         ondrop: function () {
+          // Guard: only the zone the prop is actively hovering should process the drop.
+          // interact.js can fire ondrop on multiple zones when they overlap or are close
+          // together — this guard ensures only the correct (last-entered) zone wins.
+          if (placed || zone !== activeDropZone) return
+          activeDropZone = null
           dropHandled = true
           zone.removeAttribute('data-drag-over')
           prop.classList.remove('prop--over-zone')
@@ -996,6 +1004,7 @@
           setDisabled(getSubmitBtn(), false)
         },
         ondropdeactivate: function () {
+          if (activeDropZone === zone) activeDropZone = null  // clean up for missed drops
           zone.removeAttribute('data-drag-over')
           removeZoneBorder(zone)
         }
@@ -1179,6 +1188,14 @@
       if (resultsForm && tryAgainWrap) {
         resultsForm.addEventListener('submit', function () { hide(tryAgainWrap) })
       }
+    }
+
+    // ── Restart button → reload page ──────────────────────────────────────────
+    var restartBtn = qel('restart-btn')
+    if (restartBtn) {
+      restartBtn.addEventListener('click', function () {
+        window.location.reload()
+      })
     }
   }
 
