@@ -1038,14 +1038,18 @@
             btn.setAttribute('data-selected', 'false')
           })
 
-          // Restore zone opacities
+          // Restore zone opacities; fully clean the previously-filled zone so
+          // interact.js doesn't carry stale hover/border state into the next drag
           zone.removeAttribute('data-filled')
+          zone.removeAttribute('data-drag-over')   // clear any stale hover state
+          _removeBorderFromEl(zone)                // remove dashed border if still present
           qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
             z.style.transition = 'opacity 0.3s ease'
             z.style.opacity    = ''
           })
 
           // Reset state so the user can drag again
+          activeDropZone = null   // safety: ensure ondrop guard starts clean
           selectedLogoId = null
           placed         = false
           setDisabled(getSubmitBtn(), true)
