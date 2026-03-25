@@ -1052,8 +1052,8 @@
       listeners: {
         start: function (event) {
           if (locked || placed) { event.interaction.stop(); return }
-          prop.setAttribute('data-drag-active', 'true')  // set BEFORE lift — CSS scale applies from frame 1
-          liftPropToBody(prop)
+          liftPropToBody(prop)                            // capture natural rect BEFORE CSS scale
+          prop.setAttribute('data-drag-active', 'true')  // scale now applies to correctly-sized fixed element
 
           // Center the prop's layout box under the pointer so dragging
           // feels anchored to the cursor regardless of where the user grabbed.
