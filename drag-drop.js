@@ -974,7 +974,7 @@
       if (hit === activeDropZone) return   // nothing changed — skip DOM writes
 
       activeDropZone = hit
-      pendingZone    = hit   // persists through ondropdeactivate so end() can use it
+      pendingZone = hit || null   // persists through ondropdeactivate so end() can use it
       qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
         .forEach(function (z) {
           z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
