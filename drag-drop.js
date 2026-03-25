@@ -1075,41 +1075,24 @@
           setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
           syncActiveZone(event.clientX, event.clientY)
         },
-        end: function (event) {
-          // 🔥 ALWAYS compute fresh — never trust stored state
-          var prevPE = prop.style.pointerEvents
-          prop.style.pointerEvents = 'none'
-          var el = document.elementFromPoint(event.clientX, event.clientY)
-          prop.style.pointerEvents = prevPE
-        
-          var finalZone = el
-            ? el.closest('.csg-design-system---makebuild--wih1_drop-zone_wrap')
-            : null
-        
-          if (finalZone && !placed && !locked) {
-            executeDrop(finalZone)
-          } else {
-            snapPropBack(prop)
-            setTimeout(function () {
-              prop.removeAttribute('data-drag-active')
-              if (instrEl) instrEl.style.display = ''
-            }, SNAP_BACK_MS)
-          }
-        
-          // 🧹 Clean UI state (no logic state here)
-          qEl.classList.remove('csg-design-system---makebuild--is-dragging')
-        
-          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview')
-            .forEach(function (p) {
-              p.classList.remove('is-dragging')
-            })
-        
-          // ❌ REMOVE THESE (important)
-          activeDropZone = null
-          pendingZone = null
-          dropHandled = false
-}  
+       end: function (event) {
+           syncActiveZone(event.clientX, event.clientY)
+          if (!dropHandled) {
+            if (activeDropZone && !placed && !locked) {
+              // interact.js overlap check missed (prop small at 40% scale, cursor at
+              // zone edge) but elementFromPoint confirmed the zone — execute drop.
+              executeDrop(activeDropZone)
+            } else {
+              // Genuine no-drop — snap back; CSS opacity:0 takes over after animation
+              snapPropBack(prop)
+              setTimeout(function () {
+                prop.removeAttribute('data-drag-active')
+                if (instrEl) instrEl.style.display = ''
+              }, SNAP_BACK_MS)
+            }
+          }  
       }
+    }
     })
 
     // ── Drop zones (.wih1_drop-zone_wrap) ─────────────────────────────────────
