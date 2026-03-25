@@ -753,7 +753,7 @@
 
   var SNAP_BACK_MS = 350
   var SNAP_TO_MS   = 250
-  var OVERLAP      = 0.3
+  var OVERLAP      = 0.5
 
   // ─── PROP REPARENTING ─────────────────────────────────────────────────────────
   // CSS transforms on any ancestor break position:fixed (fixed becomes relative
