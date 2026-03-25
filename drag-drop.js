@@ -753,7 +753,7 @@
 
   var SNAP_BACK_MS = 350
   var SNAP_TO_MS   = 250
-  var OVERLAP      = 0.5
+  var OVERLAP      = 'pointer'
 
   // ─── PROP REPARENTING ─────────────────────────────────────────────────────────
   // CSS transforms on any ancestor break position:fixed (fixed becomes relative
@@ -1075,12 +1075,13 @@
           setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
           syncActiveZone(event.clientX, event.clientY)
         },
-        end: function () {
+        end: function (event) {
+           syncActiveZone(event.clientX, event.clientY)
           if (!dropHandled) {
-            if (pendingZone && !placed && !locked) {
+            if (activeDropZone && !placed && !locked) {
               // interact.js overlap check missed (prop small at 40% scale, cursor at
               // zone edge) but elementFromPoint confirmed the zone — execute drop.
-              executeDrop(pendingZone)
+              executeDrop(activeDropZone)
             } else {
               // Genuine no-drop — snap back; CSS opacity:0 takes over after animation
               snapPropBack(prop)
