@@ -161,6 +161,31 @@
       '  outline: none !important;',
       '  box-shadow: none !important;',
       '}',
+      /* ── Keyboard accessibility ───────────────────────────────────────────── */
+      /* Prop parent: subtle focus ring when prop is keyboard-focused.           */
+      /* The prop itself has opacity:0, so we style its parent container.       */
+      '[data-kb-drag="handle"]:focus-within {',
+      '  outline: 2px solid rgba(255,255,255,0.65) !important;',
+      '  outline-offset: 4px;',
+      '  border-radius: 4px;',
+      '}',
+      /* Prop parent: pulsing dashed ring while a grab is active (zones active) */
+      '[data-kb-drag="handle"][data-kb-grabbed="true"] {',
+      '  outline: 2px dashed #FF00A0 !important;',
+      '  outline-offset: 4px;',
+      '  border-radius: 4px;',
+      '}',
+      /* Zone: standard keyboard focus ring (gradient highlight still applies   */
+      /* via data-drag-over="true" which is set on focus during a grab)         */
+      '.csg-design-system---makebuild--wih1_drop-zone_wrap:focus-visible {',
+      '  outline: 2px solid rgba(255,255,255,0.7) !important;',
+      '  outline-offset: 3px;',
+      '}',
+      /* Remove button: focus ring */
+      '[data-drop-element="remove"]:focus-visible {',
+      '  outline: 2px solid rgba(255,255,255,0.7) !important;',
+      '  outline-offset: 2px;',
+      '}',
     ].join('\n')
     document.head.appendChild(style)
   }
@@ -204,6 +229,26 @@
   var refillTimerId  = null
   var locked         = false
   var selectedLogoId = null   // logo-id the prop is currently resting on
+
+  // ─── KEYBOARD A11Y STATE ──────────────────────────────────────────────────────
+  var _kbAbortCtrl = null  // AbortController; aborted & replaced on each initQuestion
+  var _kbLockFn    = null  // fn to silently freeze kb state when quiz locks (submit/timeout)
+  var _kbAnnouncer = null  // shared aria-live region for screen reader announcements
+
+  function announceKb (msg) {
+    if (!_kbAnnouncer) {
+      _kbAnnouncer = document.createElement('div')
+      _kbAnnouncer.setAttribute('role', 'status')
+      _kbAnnouncer.setAttribute('aria-live', 'polite')
+      _kbAnnouncer.setAttribute('aria-atomic', 'true')
+      _kbAnnouncer.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;' +
+        'clip:rect(0,0,0,0);white-space:nowrap;border:0;padding:0;margin:-1px;'
+      document.body.appendChild(_kbAnnouncer)
+    }
+    // Clear then re-set on next frame so identical consecutive messages still fire
+    _kbAnnouncer.textContent = ''
+    requestAnimationFrame(function () { _kbAnnouncer.textContent = msg })
+  }
 
   function currentQ () { return questionEls[currentIndex] || null }
 
@@ -441,6 +486,7 @@
     if (locked || !selectedLogoId) return
     stopTimer()
     locked = true
+    if (_kbLockFn) { _kbLockFn(); _kbLockFn = null }
     var qEl = currentQ()
     if (!qEl) return
 
@@ -495,6 +541,7 @@
 
   function onTimeout () {
     locked = true
+    if (_kbLockFn) { _kbLockFn(); _kbLockFn = null }
     var qEl = currentQ()
     if (!qEl) return
 
@@ -878,6 +925,36 @@
     var dropHandled    = false  // true when ondrop fired during the current gesture
     var activeDropZone = null   // the zone currently under the prop (set by ondragenter)
 
+    // ── Pointer-position zone tracker ─────────────────────────────────────────
+    // Drives activeDropZone and data-drag-over from the actual cursor position
+    // rather than interact.js overlap geometry, which can misfire when zones are
+    // close together or when the scaled prop's bounding rect straddles two zones.
+    function syncActiveZone (clientX, clientY) {
+      // Temporarily suppress pointer-events on the prop so elementFromPoint
+      // looks through it to whatever is beneath (the zone, or nothing).
+      var prevPE = prop.style.pointerEvents
+      prop.style.pointerEvents = 'none'
+      var el  = document.elementFromPoint(clientX, clientY)
+      prop.style.pointerEvents = prevPE
+
+      var hit = el
+        ? el.closest('.csg-design-system---makebuild--wih1_drop-zone_wrap')
+        : null
+
+      if (hit === activeDropZone) return   // nothing changed — skip DOM writes
+
+      activeDropZone = hit
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
+        .forEach(function (z) {
+          z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
+        })
+      if (hit) {
+        prop.classList.add('prop--over-zone')
+      } else {
+        prop.classList.remove('prop--over-zone')
+      }
+    }
+
     // ── Draggable (quiz-prop) ──────────────────────────────────────────────────
     interact(prop).draggable({
       inertia:    false,
@@ -909,6 +986,7 @@
           if (locked) { snapPropBack(prop); return }
           var pos = getPropPos(prop)
           setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
+          syncActiveZone(event.clientX, event.clientY)
         },
         end: function () {
           if (!dropHandled) {
@@ -939,16 +1017,10 @@
           zone.setAttribute('data-drag-over', 'ready')
           addZoneBorder(zone)   // show dashed border on ALL zones when drag starts
         },
-        ondragenter: function () {
-          activeDropZone = zone                          // record which zone is live
-          zone.setAttribute('data-drag-over', 'true')
-          prop.classList.add('prop--over-zone')
-        },
-        ondragleave: function () {
-          if (activeDropZone === zone) activeDropZone = null  // prop left without dropping
-          zone.setAttribute('data-drag-over', 'ready')
-          prop.classList.remove('prop--over-zone')
-        },
+        // ondragenter / ondragleave removed — activeDropZone and data-drag-over
+        // are now driven by syncActiveZone() in the move listener, which uses
+        // document.elementFromPoint for pixel-accurate zone detection instead of
+        // interact.js's overlap geometry (which misfires with adjacent zones).
         ondrop: function () {
           // Guard: only the zone the prop is actively hovering should process the drop.
           // interact.js can fire ondrop on multiple zones when they overlap or are close
@@ -1056,6 +1128,253 @@
         })
       }
     })
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // KEYBOARD DRAG-AND-DROP
+    // ══════════════════════════════════════════════════════════════════════════
+    //
+    // Pattern:
+    //   Tab → focus prop (shows focus ring on its parent container)
+    //   Enter / Space → "pick up" (kbGrab): all zones enter tab order
+    //   Tab / Shift-Tab → navigate between zones (zone highlights as it focuses)
+    //   Enter / Space on a zone → drop there (kbDrop)
+    //   Escape → cancel (kbCancel): return focus to prop
+    //   Tab → remove button → Enter/Space → clear drop, return focus to prop
+    //
+    // The keyboard path shares `placed`, `locked`, `selectedLogoId` with the
+    // pointer path — only one can be active at a time (placed guards both).
+
+    // ── Abort previous question's keyboard listeners ────────────────────────
+    if (_kbAbortCtrl) _kbAbortCtrl.abort()
+    _kbAbortCtrl = new AbortController()
+    var kbSig = _kbAbortCtrl.signal
+
+    // ── Per-question state ──────────────────────────────────────────────────
+    var kbGrabbed  = false
+    var kbZones    = Array.from(qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap'))
+    var propWrap   = prop.parentNode
+    var showLabel  = getShowName(qEl) || prop.getAttribute('alt') || 'item'
+
+    // Human-readable name for a zone (prefers img alt text over raw id)
+    function kbZoneLabel (zone) {
+      var img = zone.querySelector('img[alt]')
+      if (img && img.alt) return img.alt
+      var byId = zone.querySelector('[data-logo-id]')
+      if (byId) return byId.dataset.logoId || zone.dataset.dropBg || 'zone'
+      return zone.dataset.dropBg || 'zone'
+    }
+
+    // ── ARIA / tabIndex baseline ────────────────────────────────────────────
+
+    // Mark prop's parent so CSS :focus-within can draw a visible outline
+    // (the prop itself is opacity:0 — its parent is the visible surface)
+    propWrap.setAttribute('data-kb-drag', 'handle')
+
+    prop.setAttribute('tabIndex', '0')
+    prop.setAttribute('role', 'button')
+    prop.setAttribute('aria-label', showLabel + ' — press Enter or Space to pick up')
+
+    // Zones are removed from tab order until a grab is active
+    kbZones.forEach(function (zone) {
+      zone.setAttribute('role', 'button')
+      zone.setAttribute('tabIndex', '-1')
+      zone.setAttribute('aria-label', 'Drop on ' + kbZoneLabel(zone))
+      zone.setAttribute('aria-pressed', 'false')
+    })
+
+    // Remove buttons need to be keyboard-activatable (they may be plain divs)
+    kbZones.forEach(function (zone) {
+      var rem = zone.querySelector('[data-drop-element="remove"]')
+      if (!rem) return
+      if (!rem.getAttribute('role')) rem.setAttribute('role', 'button')
+      rem.setAttribute('tabIndex', '-1')  // shown only when zone is filled
+      if (!rem.getAttribute('aria-label')) {
+        rem.setAttribute('aria-label', 'Remove ' + showLabel + ' from ' + kbZoneLabel(zone))
+      }
+    })
+
+    // ── kbGrab ─────────────────────────────────────────────────────────────
+    function kbGrab () {
+      if (locked || placed) return
+      kbGrabbed = true
+      propWrap.setAttribute('data-kb-grabbed', 'true')
+      prop.setAttribute('aria-grabbed', 'true')
+      prop.setAttribute('aria-label', showLabel + ' — picked up. Tab to a zone and press Enter to place it. Escape to cancel.')
+      prop.setAttribute('tabIndex', '-1')   // remove from tab order while grabbed
+      if (instrEl) instrEl.style.display = 'none'
+
+      kbZones.forEach(function (zone) {
+        zone.setAttribute('tabIndex', '0')
+        zone.setAttribute('data-drag-over', 'ready')
+        addZoneBorder(zone)
+      })
+
+      // Focus first zone immediately
+      if (kbZones.length) kbZones[0].focus()
+
+      announceKb(showLabel + ' picked up. Tab through the zones and press Enter to drop. Escape to cancel.')
+    }
+
+    // ── kbCancel ───────────────────────────────────────────────────────────
+    function kbCancel () {
+      if (!kbGrabbed) return
+      kbGrabbed = false
+      propWrap.removeAttribute('data-kb-grabbed')
+      prop.setAttribute('aria-grabbed', 'false')
+      prop.setAttribute('tabIndex', '0')
+      prop.setAttribute('aria-label', showLabel + ' — press Enter or Space to pick up')
+      if (instrEl) instrEl.style.display = ''
+
+      kbZones.forEach(function (zone) {
+        zone.setAttribute('tabIndex', '-1')
+        zone.removeAttribute('data-drag-over')
+        removeZoneBorder(zone)
+      })
+
+      prop.focus()
+      announceKb('Cancelled. ' + showLabel + ' returned.')
+    }
+
+    // ── kbLock: silently freeze KB state when quiz locks (submit / timeout) ─
+    function kbLock () {
+      kbGrabbed = false
+      propWrap.removeAttribute('data-kb-grabbed')
+      if (prop) {
+        prop.setAttribute('tabIndex', '-1')
+        prop.setAttribute('aria-grabbed', 'false')
+      }
+      kbZones.forEach(function (zone) {
+        zone.setAttribute('tabIndex', '-1')
+        zone.removeAttribute('data-drag-over')
+        removeZoneBorder(zone)
+      })
+    }
+    _kbLockFn = kbLock
+
+    // ── kbDrop ─────────────────────────────────────────────────────────────
+    function kbDrop (zone) {
+      if (!kbGrabbed || placed || locked) return
+      kbGrabbed = false
+      propWrap.removeAttribute('data-kb-grabbed')
+      prop.setAttribute('aria-grabbed', 'false')
+      prop.setAttribute('tabIndex', '-1')  // placed; no longer interactive
+      prop.setAttribute('aria-label', showLabel + ' — placed. Tab to the remove button to try again.')
+
+      // Collapse all zones back out of tab order, update ARIA
+      kbZones.forEach(function (z) {
+        z.setAttribute('tabIndex', '-1')
+        z.removeAttribute('data-drag-over')
+        removeZoneBorder(z)
+        z.setAttribute('aria-pressed', z === zone ? 'true' : 'false')
+      })
+
+      // ── Shared drop logic (mirrors pointer ondrop) ────────────────────────
+      placed         = true
+      selectedLogoId = zone.dataset.dropBg
+      zone.setAttribute('data-filled', 'true')
+
+      // Dim other zones
+      kbZones.forEach(function (z) {
+        if (z !== zone) {
+          z.style.transition = 'opacity 0.3s ease'
+          z.style.opacity    = '0.5'
+        }
+      })
+
+      // Reveal preview image immediately (no snap animation in keyboard mode)
+      var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
+      if (previewImg) {
+        var srcEl  = dragImg || prop
+        previewImg.src = srcEl.src
+        var srcset = srcEl.getAttribute('srcset')
+        var sizes  = srcEl.getAttribute('sizes')
+        if (srcset) previewImg.setAttribute('srcset', srcset)
+        if (sizes)  previewImg.setAttribute('sizes',  sizes)
+        previewImg.style.opacity = '1'
+      }
+
+      // Show remove button and bring it into tab order
+      var remEl = zone.querySelector('[data-drop-element="remove"]')
+      if (remEl) {
+        remEl.style.opacity = '1'
+        remEl.setAttribute('tabIndex', '0')
+        remEl.focus()
+      } else {
+        var sb = getSubmitBtn()
+        if (sb) sb.focus()
+      }
+
+      // Mark answer buttons
+      qels('answer', qEl).forEach(function (btn) {
+        btn.setAttribute('data-selected', btn.dataset.logoId === selectedLogoId ? 'true' : 'false')
+      })
+
+      setDisabled(getSubmitBtn(), false)
+      announceKb(showLabel + ' placed on ' + kbZoneLabel(zone) + '. Press Tab to submit, or activate Remove to try again.')
+    }
+
+    // ── Event listeners ────────────────────────────────────────────────────
+
+    // Prop: Enter / Space → grab
+    prop.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kbGrab() }
+    }, { signal: kbSig })
+
+    // Zones: Enter / Space → drop; Escape → cancel; focus → highlight
+    kbZones.forEach(function (zone) {
+      zone.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kbDrop(zone) }
+        else if (e.key === 'Escape') { e.preventDefault(); kbCancel() }
+      }, { signal: kbSig })
+
+      // Show gradient on the focused zone during a grab (reuses existing CSS)
+      zone.addEventListener('focus', function () {
+        if (!kbGrabbed) return
+        kbZones.forEach(function (z) {
+          z.setAttribute('data-drag-over', z === zone ? 'true' : 'ready')
+        })
+      }, { signal: kbSig })
+
+      zone.addEventListener('blur', function () {
+        if (!kbGrabbed) return
+        zone.setAttribute('data-drag-over', 'ready')
+      }, { signal: kbSig })
+    })
+
+    // Remove buttons: Enter / Space → click (they may not be native buttons)
+    // A second click listener also resets prop ARIA/tabIndex after any remove
+    // (pointer or keyboard) so the user can drag again.
+    kbZones.forEach(function (zone) {
+      var remEl = zone.querySelector('[data-drop-element="remove"]')
+      if (!remEl) return
+
+      // Enter / Space → synthesise a click so the existing pointer handler runs
+      remEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remEl.click() }
+      }, { signal: kbSig })
+
+      // After any remove (pointer or keyboard): restore prop to draggable state
+      remEl.addEventListener('click', function () {
+        prop.setAttribute('tabIndex', '0')
+        prop.setAttribute('aria-grabbed', 'false')
+        prop.setAttribute('aria-label', showLabel + ' — press Enter or Space to pick up')
+        propWrap.removeAttribute('data-kb-grabbed')
+        zone.setAttribute('aria-pressed', 'false')
+        // Re-enable remove button tabIndex=0 so it's focusable if filled again;
+        // it will be hidden by CSS (opacity:0) until needed.
+        remEl.setAttribute('tabIndex', '-1')
+        // Return focus to prop if keyboard is driving (focus is inside the zone)
+        if (zone.contains(document.activeElement) || document.activeElement === remEl) {
+          prop.focus()
+          announceKb(showLabel + ' removed. Press Enter to pick up and try again.')
+        }
+      }, { signal: kbSig })
+    })
+
+    // Global Escape while grabbed (catches Escape outside any specific zone)
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && kbGrabbed) { e.preventDefault(); kbCancel() }
+    }, { signal: kbSig })
   }
 
   // ─── SPLASH ANIMATION ────────────────────────────────────────────────────────
