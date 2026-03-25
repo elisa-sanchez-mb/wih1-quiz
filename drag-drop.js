@@ -753,7 +753,7 @@
 
   var SNAP_BACK_MS = 350
   var SNAP_TO_MS   = 250
-  var OVERLAP      = 'pointer'
+  var OVERLAP      = 0.3
 
   // ─── PROP REPARENTING ─────────────────────────────────────────────────────────
   // CSS transforms on any ancestor break position:fixed (fixed becomes relative
@@ -974,7 +974,7 @@
       if (hit === activeDropZone) return   // nothing changed — skip DOM writes
 
       activeDropZone = hit
-      pendingZone = hit || null   // persists through ondropdeactivate so end() can use it
+      pendingZone    = hit   // persists through ondropdeactivate so end() can use it
       qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
         .forEach(function (z) {
           z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
@@ -1075,13 +1075,12 @@
           setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
           syncActiveZone(event.clientX, event.clientY)
         },
-       end: function (event) {
-           syncActiveZone(event.clientX, event.clientY)
+        end: function () {
           if (!dropHandled) {
-            if (activeDropZone && !placed && !locked) {
+            if (pendingZone && !placed && !locked) {
               // interact.js overlap check missed (prop small at 40% scale, cursor at
               // zone edge) but elementFromPoint confirmed the zone — execute drop.
-              executeDrop(activeDropZone)
+              executeDrop(pendingZone)
             } else {
               // Genuine no-drop — snap back; CSS opacity:0 takes over after animation
               snapPropBack(prop)
@@ -1090,9 +1089,15 @@
                 if (instrEl) instrEl.style.display = ''
               }, SNAP_BACK_MS)
             }
-          }  
+          }
+          pendingZone = null  // always clear after gesture ends
+          // Remove dragging state immediately on gesture end (drop or no-drop)
+          qEl.classList.remove('csg-design-system---makebuild--is-dragging')
+          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.remove('is-dragging') })
+          // Drop case: data-drag-active removed inside executeDrop's setTimeout
+          dropHandled = false
+        }
       }
-    }
     })
 
     // ── Drop zones (.wih1_drop-zone_wrap) ─────────────────────────────────────
