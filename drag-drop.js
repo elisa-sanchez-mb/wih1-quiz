@@ -547,10 +547,38 @@
 
     revealAnswers(qEl)
     showFeedback(qEl, false, 0)
-    // Prop stays wherever it is — the locked check in the move listener
-    // already stops any in-progress drag.
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   true)  // timeout overlay's own button handles navigation
+
+    var animTrans = 'opacity 650ms cubic-bezier(0.25,0.1,0.25,1), filter 650ms cubic-bezier(0.25,0.1,0.25,1)'
+
+    // Fade out prop + static slot image (mirrors onSubmit)
+    var timeoutProp    = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
+    var timeoutDragImg = qEl.querySelector('.csg-design-system---makebuild--quiz_drag_img')
+    if (timeoutProp) {
+      timeoutProp.style.transition = animTrans
+      timeoutProp.style.opacity    = '0'
+      timeoutProp.style.filter     = 'blur(10px)'
+      setTimeout(function () { hide(timeoutProp) }, 650)
+    }
+    if (timeoutDragImg) {
+      timeoutDragImg.style.transition = animTrans
+      timeoutDragImg.style.opacity    = '0'
+    }
+
+    // Fade in reveal image (mirrors onSubmit)
+    var timeoutReveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
+    if (timeoutReveal) {
+      timeoutReveal.style.display    = 'block'
+      timeoutReveal.style.opacity    = '0'
+      timeoutReveal.style.filter     = 'blur(10px)'
+      timeoutReveal.style.transition = animTrans
+      timeoutReveal.setAttribute('data-visibility', '1')
+      timeoutReveal.removeAttribute('hidden')
+      timeoutReveal.getBoundingClientRect()
+      timeoutReveal.style.opacity = '1'
+      timeoutReveal.style.filter  = 'blur(0px)'
+    }
 
     // Populate and show the timeout overlay
     if (timeoutOverlay) {
@@ -923,7 +951,9 @@
     // ── Per-gesture flags ──────────────────────────────────────────────────────
     var placed         = false  // true after a successful drop; cleared by remove
     var dropHandled    = false  // true when ondrop fired during the current gesture
-    var activeDropZone = null   // the zone currently under the prop (set by ondragenter)
+    var activeDropZone = null   // zone under cursor per syncActiveZone
+    var pendingZone    = null   // same as activeDropZone but NOT cleared by ondropdeactivate,
+                                // so end() can still fall back to it when overlap check misses
 
     // ── Pointer-position zone tracker ─────────────────────────────────────────
     // Drives activeDropZone and data-drag-over from the actual cursor position
@@ -944,6 +974,7 @@
       if (hit === activeDropZone) return   // nothing changed — skip DOM writes
 
       activeDropZone = hit
+      pendingZone    = hit   // persists through ondropdeactivate so end() can use it
       qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
         .forEach(function (z) {
           z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
@@ -953,6 +984,62 @@
       } else {
         prop.classList.remove('prop--over-zone')
       }
+    }
+
+    // ── Shared drop executor ──────────────────────────────────────────────────
+    // Called by ondrop (interact.js path) and by end() as a fallback when the
+    // overlap check misses (e.g. prop is small at 40% scale and cursor is near
+    // a zone edge — elementFromPoint confirms the zone but overlap < threshold).
+    function executeDrop (zone) {
+      if (placed || locked) return
+      dropHandled    = true
+      pendingZone    = null
+      activeDropZone = null
+      zone.removeAttribute('data-drag-over')
+      prop.classList.remove('prop--over-zone')
+
+      placed         = true
+      selectedLogoId = zone.dataset.dropBg
+      zone.setAttribute('data-filled', 'true')
+
+      // Dim all other drop zones
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+        if (z !== zone) {
+          z.style.transition = 'opacity 0.3s ease'
+          z.style.opacity    = '0.5'
+        }
+      })
+
+      // Snap prop to previewWrap centre, then reveal the existing preview img
+      var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
+      var previewImg  = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
+      var snapTarget  = previewWrap || zone
+      snapPropToZone(prop, snapTarget)
+
+      setTimeout(function () {
+        if (previewImg) {
+          var srcEl  = dragImg || prop
+          previewImg.src = srcEl.src
+          var srcset = srcEl.getAttribute('srcset')
+          var sizes  = srcEl.getAttribute('sizes')
+          if (srcset) previewImg.setAttribute('srcset', srcset)
+          if (sizes)  previewImg.setAttribute('sizes',  sizes)
+          previewImg.style.opacity = '1'
+        }
+        restorePropToFlow(prop)
+        prop.removeAttribute('data-drag-active')  // CSS: opacity:0
+      }, SNAP_TO_MS)
+
+      // Show remove button
+      var removeEl = zone.querySelector('[data-drop-element="remove"]')
+      if (removeEl) removeEl.style.opacity = '1'
+
+      // Mark answer logo as selected
+      qels('answer', qEl).forEach(function (btn) {
+        btn.setAttribute('data-selected', btn.dataset.logoId === selectedLogoId ? 'true' : 'false')
+      })
+
+      setDisabled(getSubmitBtn(), false)
     }
 
     // ── Draggable (quiz-prop) ──────────────────────────────────────────────────
@@ -990,17 +1077,24 @@
         },
         end: function () {
           if (!dropHandled) {
-            // No drop — snap back; after animation CSS opacity:0 takes over
-            snapPropBack(prop)
-            setTimeout(function () {
-              prop.removeAttribute('data-drag-active')
-              if (instrEl) instrEl.style.display = ''
-            }, SNAP_BACK_MS)
+            if (pendingZone && !placed && !locked) {
+              // interact.js overlap check missed (prop small at 40% scale, cursor at
+              // zone edge) but elementFromPoint confirmed the zone — execute drop.
+              executeDrop(pendingZone)
+            } else {
+              // Genuine no-drop — snap back; CSS opacity:0 takes over after animation
+              snapPropBack(prop)
+              setTimeout(function () {
+                prop.removeAttribute('data-drag-active')
+                if (instrEl) instrEl.style.display = ''
+              }, SNAP_BACK_MS)
+            }
           }
+          pendingZone = null  // always clear after gesture ends
           // Remove dragging state immediately on gesture end (drop or no-drop)
           qEl.classList.remove('csg-design-system---makebuild--is-dragging')
           qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.remove('is-dragging') })
-          // Drop case: data-drag-active removed inside ondrop's setTimeout
+          // Drop case: data-drag-active removed inside executeDrop's setTimeout
           dropHandled = false
         }
       }
@@ -1022,58 +1116,11 @@
         // document.elementFromPoint for pixel-accurate zone detection instead of
         // interact.js's overlap geometry (which misfires with adjacent zones).
         ondrop: function () {
-          // Guard: only the zone the prop is actively hovering should process the drop.
-          // interact.js can fire ondrop on multiple zones when they overlap or are close
-          // together — this guard ensures only the correct (last-entered) zone wins.
+          // Guard: only the zone matching activeDropZone (cursor-based) may process
+          // the drop. interact.js can fire ondrop on multiple zones when their rects
+          // are close — this ensures only the one under the cursor wins.
           if (placed || zone !== activeDropZone) return
-          activeDropZone = null
-          dropHandled = true
-          zone.removeAttribute('data-drag-over')
-          prop.classList.remove('prop--over-zone')
-          if (locked) return
-
-          placed         = true
-          selectedLogoId = zone.dataset.dropBg
-          zone.setAttribute('data-filled', 'true')
-
-          // Dim all other (empty) drop zones to 50% opacity
-          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
-            if (z !== zone) {
-              z.style.transition = 'opacity 0.3s ease'
-              z.style.opacity    = '0.5'
-            }
-          })
-
-          // Snap prop to previewWrap centre, then reveal the existing preview img
-          var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
-          var previewImg  = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
-          var snapTarget  = previewWrap || zone
-          snapPropToZone(prop, snapTarget)
-
-          setTimeout(function () {
-            if (previewImg) {
-              var srcEl  = dragImg || prop   // use the full-size static image as source
-              previewImg.src = srcEl.src
-              var srcset = srcEl.getAttribute('srcset')
-              var sizes  = srcEl.getAttribute('sizes')
-              if (srcset) previewImg.setAttribute('srcset', srcset)
-              if (sizes)  previewImg.setAttribute('sizes',  sizes)
-              previewImg.style.opacity = '1'
-            }
-            restorePropToFlow(prop)
-            prop.removeAttribute('data-drag-active')  // CSS: opacity:0
-          }, SNAP_TO_MS)
-
-          // Show remove button
-          var removeEl = zone.querySelector('[data-drop-element="remove"]')
-          if (removeEl) removeEl.style.opacity = '1'
-
-          // Mark answer logo as selected
-          qels('answer', qEl).forEach(function (btn) {
-            btn.setAttribute('data-selected', btn.dataset.logoId === selectedLogoId ? 'true' : 'false')
-          })
-
-          setDisabled(getSubmitBtn(), false)
+          executeDrop(zone)
         },
         ondropdeactivate: function () {
           if (activeDropZone === zone) activeDropZone = null  // clean up for missed drops
