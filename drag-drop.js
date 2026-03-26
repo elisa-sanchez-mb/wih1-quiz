@@ -976,7 +976,10 @@
       if (hit === activeDropZone) return   // nothing changed — skip DOM writes
 
       activeDropZone = hit
-      pendingZone    = hit   // persists through ondropdeactivate so end() can use it
+      // pendingZone is sticky: only update when entering a zone, never when leaving.
+      // This prevents the gap-scan in end() from preferring the zone BELOW the gap
+      // over the zone the cursor just left (both equidistant when in the gap center).
+      if (hit !== null) pendingZone = hit
       qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
         .forEach(function (z) {
           z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
@@ -1080,20 +1083,25 @@
         },
         end: function (event) {
           if (!dropHandled) {
-            var targetZone = pendingZone
-            // Gap-tolerance fallback: cursor may have released in the inter-zone
-            // gap, above the top zone, or elementFromPoint may have missed (e.g.
-            // a fixed overlay covers the zone). Use the cached last-move position
-            // as fallback for touch events where end clientX/Y can be 0.
+            var cx = (event && event.clientX) || lastDragX
+            var cy = (event && event.clientY) || lastDragY
+            // pendingZone is sticky (last zone the cursor was over). Verify it is
+            // still within 25px of the release point so dragging far away snaps back.
+            var targetZone = null
+            if (pendingZone && !placed && !locked) {
+              var rp = pendingZone.getBoundingClientRect()
+              var clampedPX = Math.max(rp.left, Math.min(rp.right,  cx))
+              var clampedPY = Math.max(rp.top,  Math.min(rp.bottom, cy))
+              var pendingDist = Math.sqrt(Math.pow(cx - clampedPX, 2) + Math.pow(cy - clampedPY, 2))
+              if (pendingDist <= 25) targetZone = pendingZone
+            }
+            // Distance-based fallback: handles the case where cursor was never over
+            // a zone (e.g. released directly into a gap without crossing a zone).
             if (!targetZone && !placed && !locked) {
-              var cx = (event && event.clientX) || lastDragX
-              var cy = (event && event.clientY) || lastDragY
               var bestDist = Infinity
               qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
                 if (z.getAttribute('data-filled')) return
                 var r = z.getBoundingClientRect()
-                // Clamp cursor to zone rect and compute distance — catches gaps,
-                // overshoot above top zone, and cursor just outside zone bounds.
                 var clampedX = Math.max(r.left, Math.min(r.right,  cx))
                 var clampedY = Math.max(r.top,  Math.min(r.bottom, cy))
                 var dist = Math.sqrt(Math.pow(cx - clampedX, 2) + Math.pow(cy - clampedY, 2))
