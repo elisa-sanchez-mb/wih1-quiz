@@ -949,13 +949,16 @@
     })
 
     // ── Per-gesture flags ──────────────────────────────────────────────────────
-    var placed         = false  // true after a successful drop; cleared by remove
-    var dropHandled    = false  // true when ondrop fired during the current gesture
-    var activeDropZone = null   // zone under cursor per syncActiveZone
-    var pendingZone    = null   // same as activeDropZone but NOT cleared by ondropdeactivate,
-                                // so end() can still fall back to it when overlap check misses
-    var lastDragX      = 0      // last known cursor position — used as fallback in end()
-    var lastDragY      = 0      // because touch end events sometimes have clientX/Y = 0
+    var placed              = false  // true after a successful drop; cleared by remove
+    var dropHandled         = false  // true when ondrop fired during the current gesture
+    var activeDropZone      = null   // zone under cursor per syncActiveZone
+    var pendingZone         = null   // sticky: only updated on zone ENTRY
+    var prevPendingZone     = null   // pendingZone before last zone change (overshoot detection)
+    var pendingZoneEnteredAt = 0     // timestamp when pendingZone last changed
+    var lastZoneJumpY       = 0      // cursor y-delta at moment pendingZone last changed
+    var lastDragX           = 0      // last known cursor position — used as fallback in end()
+    var lastDragY           = 0      // because touch end events sometimes have clientX/Y = 0
+    var prevDragY           = 0      // y from previous move, for jump-size detection
 
     // ── Pointer-position zone tracker ─────────────────────────────────────────
     // Drives activeDropZone and data-drag-over from the actual cursor position
@@ -977,10 +980,13 @@
 
       activeDropZone = hit
       // pendingZone is sticky: only update when entering a zone, never when leaving.
-      // This prevents the gap-scan in end() from preferring the zone BELOW the gap
-      // over the zone the cursor just left (both equidistant when in the gap center).
-      if (hit !== null) pendingZone = hit
-      console.log('[wih1-drop] syncActiveZone x=' + Math.round(clientX) + ' y=' + Math.round(clientY) + ' → hit=' + (hit ? hit.dataset.dropBg : 'null') + ' pending=' + (pendingZone ? pendingZone.dataset.dropBg : 'null'))
+      // Track the previous zone and jump size so end() can detect overshoot.
+      if (hit !== null && hit !== pendingZone) {
+        prevPendingZone      = pendingZone
+        lastZoneJumpY        = clientY - prevDragY
+        pendingZoneEnteredAt = Date.now()
+        pendingZone          = hit
+      }
       qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
         .forEach(function (z) {
           z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
@@ -997,7 +1003,6 @@
     // overlap check misses (e.g. prop is small at 40% scale and cursor is near
     // a zone edge — elementFromPoint confirms the zone but overlap < threshold).
     function executeDrop (zone) {
-      console.log('[wih1-drop] executeDrop zone=' + zone.dataset.dropBg)
       if (placed || locked) return
       dropHandled    = true
       pendingZone    = null
@@ -1079,6 +1084,7 @@
           if (locked) { snapPropBack(prop); return }
           var pos = getPropPos(prop)
           setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
+          prevDragY = lastDragY
           lastDragX = event.clientX
           lastDragY = event.clientY
           syncActiveZone(event.clientX, event.clientY)
@@ -1087,20 +1093,33 @@
           if (!dropHandled) {
             var cx = (event && event.clientX) || lastDragX
             var cy = (event && event.clientY) || lastDragY
-            console.log('[wih1-drop] end cx=' + Math.round(cx) + ' cy=' + Math.round(cy) + ' pending=' + (pendingZone ? pendingZone.dataset.dropBg : 'null') + ' dropHandled=' + dropHandled)
-            // Log zone positions for comparison
-            qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function(z,i){ var r=z.getBoundingClientRect(); if(r.width>0) console.log('[wih1-drop]   zone['+i+']='+z.dataset.dropBg+' y='+Math.round(r.top)+'-'+Math.round(r.bottom)); })
+            var targetZone = null
+
+            // Overshoot protection for the topmost zone:
+            // If pendingZone changed in the last 200ms due to a large downward jump
+            // (>100px) and prevPendingZone was the topmost visible zone, the user's
+            // finger likely drifted downward while lifting — revert to the topmost zone.
+            if (!targetZone && !placed && !locked && prevPendingZone && pendingZone && lastZoneJumpY > 100) {
+              var timeAtCurrentZone = Date.now() - pendingZoneEnteredAt
+              if (timeAtCurrentZone < 200) {
+                var visibleZones = Array.from(qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')).filter(function (z) { return z.getBoundingClientRect().width > 0 })
+                var topmostZone  = visibleZones.reduce(function (min, z) { return !min || z.getBoundingClientRect().top < min.getBoundingClientRect().top ? z : min }, null)
+                if (prevPendingZone === topmostZone) {
+                  targetZone = prevPendingZone  // overshoot: prefer topmost zone
+                }
+              }
+            }
+
             // pendingZone is sticky (last zone the cursor was over). Verify it is
             // still within 25px of the release point so dragging far away snaps back.
-            var targetZone = null
-            if (pendingZone && !placed && !locked) {
+            if (!targetZone && pendingZone && !placed && !locked) {
               var rp = pendingZone.getBoundingClientRect()
               var clampedPX = Math.max(rp.left, Math.min(rp.right,  cx))
               var clampedPY = Math.max(rp.top,  Math.min(rp.bottom, cy))
               var pendingDist = Math.sqrt(Math.pow(cx - clampedPX, 2) + Math.pow(cy - clampedPY, 2))
-              console.log('[wih1-drop] pendingDist=' + Math.round(pendingDist) + ' to ' + pendingZone.dataset.dropBg + ' → ' + (pendingDist <= 25 ? 'USE' : 'SKIP'))
               if (pendingDist <= 25) targetZone = pendingZone
             }
+
             // Distance-based fallback: handles the case where cursor was never over
             // a zone (e.g. released directly into a gap without crossing a zone).
             if (!targetZone && !placed && !locked) {
@@ -1117,6 +1136,7 @@
                 }
               })
             }
+
             if (targetZone && !placed && !locked) {
               executeDrop(targetZone)
             } else {
@@ -1157,7 +1177,6 @@
           // Guard: only the zone matching activeDropZone (cursor-based) may process
           // the drop. interact.js can fire ondrop on multiple zones when their rects
           // are close — this ensures only the one under the cursor wins.
-          console.log('[wih1-drop] ondrop zone=' + zone.dataset.dropBg + ' activeDropZone=' + (activeDropZone ? activeDropZone.dataset.dropBg : 'null') + ' placed=' + placed + ' PASS=' + (!placed && zone === activeDropZone))
           if (placed || zone !== activeDropZone) return
           executeDrop(zone)
         },
