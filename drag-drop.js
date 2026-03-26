@@ -1144,6 +1144,9 @@
           // the drop. interact.js can fire ondrop on multiple zones when their rects
           // are close — this ensures only the one under the cursor wins.
           if (placed || zone !== activeDropZone) return
+          // Overshoot: if pendingZone changed <200ms ago via a large downward jump,
+          // skip ondrop and let end() apply the overshoot correction instead.
+          if (prevPendingZone && lastZoneJumpY > 100 && Date.now() - pendingZoneEnteredAt < 200) return
           executeDrop(zone)
         },
         ondropdeactivate: function () {
