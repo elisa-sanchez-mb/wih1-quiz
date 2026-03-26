@@ -907,9 +907,13 @@
     // ── Per-gesture flags ──────────────────────────────────────────────────────
     var placed         = false   // true after a successful drop; cleared by remove
     var activeDropZone = null    // zone under cursor, tracked by syncActiveZone
-    var _dragging      = false   // true while a pointer drag is in progress
+    var _pending       = false   // pointerdown seen; waiting for movement threshold
+    var _dragging      = false   // threshold exceeded; drag is active
+    var _startPX       = 0       // pointer position at pointerdown
+    var _startPY       = 0
     var _lastPX        = 0       // pointer position from previous pointermove (for dx/dy)
     var _lastPY        = 0
+    var DRAG_THRESHOLD = 5       // px of movement required to begin a drag
 
     // ── Pointer-position zone tracker ─────────────────────────────────────────
     // Uses elementFromPoint (with pointer-events:none on the prop so it looks
@@ -1013,87 +1017,108 @@
       if (locked || placed || !e.isPrimary || e.button > 0) return
       e.preventDefault()
       prop.setPointerCapture(e.pointerId)
-
-      liftPropToBody(prop)
-      prop.setAttribute('data-drag-active', 'true')
-
-      // Centre the scaled prop under the pointer (measure AFTER data-drag-active so CSS scale is applied)
-      var vr = prop.getBoundingClientRect()
-      setPropPos(prop, e.clientX - (vr.left + vr.width / 2), e.clientY - (vr.top + vr.height / 2))
-
+      _pending  = true
+      _dragging = false
+      _startPX  = e.clientX
+      _startPY  = e.clientY
       _lastPX   = e.clientX
       _lastPY   = e.clientY
-      _dragging = true
-
-      qEl.classList.add('csg-design-system---makebuild--is-dragging')
-      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
-      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
-        z.setAttribute('data-drag-over', 'ready')
-        addZoneBorder(z)
-      })
-
-      if (instrEl) instrEl.style.display = 'none'
-      syncActiveZone(e.clientX, e.clientY)
     }, { signal: propSig })
 
     prop.addEventListener('pointermove', function (e) {
-      if (!_dragging || !e.isPrimary) return
-      if (locked) { snapPropBack(prop); _endDrag(); return }
-      e.preventDefault()
+      if (!_pending || !e.isPrimary) return
+      if (locked) { _pending = false; return }
 
+      if (!_dragging) {
+        // Wait until the pointer has moved past the threshold before starting the drag.
+        // This gives the natural "press and hold, then move" feel.
+        var dx = e.clientX - _startPX
+        var dy = e.clientY - _startPY
+        if ((dx * dx + dy * dy) < DRAG_THRESHOLD * DRAG_THRESHOLD) return
+
+        // Threshold crossed — begin drag
+        liftPropToBody(prop)
+        prop.setAttribute('data-drag-active', 'true')
+
+        // Centre the scaled prop under the pointer (measure AFTER data-drag-active so CSS scale is applied)
+        var vr = prop.getBoundingClientRect()
+        setPropPos(prop, e.clientX - (vr.left + vr.width / 2), e.clientY - (vr.top + vr.height / 2))
+
+        _lastPX   = e.clientX
+        _lastPY   = e.clientY
+        _dragging = true
+
+        qEl.classList.add('csg-design-system---makebuild--is-dragging')
+        qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
+        qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+          z.setAttribute('data-drag-over', 'ready')
+          addZoneBorder(z)
+        })
+        if (instrEl) instrEl.style.display = 'none'
+        syncActiveZone(e.clientX, e.clientY)
+        return
+      }
+
+      // Drag already started — track movement
+      e.preventDefault()
       var pos = getPropPos(prop)
       setPropPos(prop, pos.x + (e.clientX - _lastPX), pos.y + (e.clientY - _lastPY))
       _lastPX = e.clientX
       _lastPY = e.clientY
-
       syncActiveZone(e.clientX, e.clientY)
     }, { signal: propSig })
 
     prop.addEventListener('pointerup', function (e) {
-      if (!_dragging || !e.isPrimary) return
+      if (!_pending || !e.isPrimary) return
       e.preventDefault()
+      _pending = false
 
-      // One final sync with the exact release coordinates — pointerup always has
-      // valid clientX/Y, so this is the definitive answer: drop or no-drop.
-      syncActiveZone(e.clientX, e.clientY)
+      if (_dragging) {
+        // One final sync with the exact release coordinates — pointerup always has
+        // valid clientX/Y, so this is the definitive answer: drop or no-drop.
+        syncActiveZone(e.clientX, e.clientY)
 
-      var targetZone = activeDropZone
+        var targetZone = activeDropZone
 
-      // Gap fallback: if the release point isn't inside a zone, accept it if it
-      // lands within 25px of a zone edge (handles the narrow inter-zone gaps).
-      if (!targetZone && !placed && !locked) {
-        var bestDist = Infinity
-        qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
-          if (z.getAttribute('data-filled')) return
-          var r  = z.getBoundingClientRect()
-          var cx = Math.max(r.left, Math.min(r.right,  e.clientX))
-          var cy = Math.max(r.top,  Math.min(r.bottom, e.clientY))
-          var d  = Math.sqrt(Math.pow(e.clientX - cx, 2) + Math.pow(e.clientY - cy, 2))
-          if (d <= 25 && d < bestDist) { bestDist = d; targetZone = z }
-        })
+        // Gap fallback: if the release point isn't inside a zone, accept it if it
+        // lands within 25px of a zone edge (handles the narrow inter-zone gaps).
+        if (!targetZone && !placed && !locked) {
+          var bestDist = Infinity
+          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+            if (z.getAttribute('data-filled')) return
+            var r  = z.getBoundingClientRect()
+            var cx = Math.max(r.left, Math.min(r.right,  e.clientX))
+            var cy = Math.max(r.top,  Math.min(r.bottom, e.clientY))
+            var d  = Math.sqrt(Math.pow(e.clientX - cx, 2) + Math.pow(e.clientY - cy, 2))
+            if (d <= 25 && d < bestDist) { bestDist = d; targetZone = z }
+          })
+        }
+
+        if (targetZone && !placed && !locked) {
+          executeDrop(targetZone)
+        } else {
+          snapPropBack(prop)
+          setTimeout(function () {
+            prop.removeAttribute('data-drag-active')
+            if (instrEl) instrEl.style.display = ''
+          }, SNAP_BACK_MS)
+        }
+        _endDrag()
       }
+      // If threshold was never crossed it was just a click — nothing to do
+    }, { signal: propSig })
 
-      if (targetZone && !placed && !locked) {
-        executeDrop(targetZone)
-      } else {
+    prop.addEventListener('pointercancel', function (e) {
+      if (!_pending || !e.isPrimary) return
+      _pending = false
+      if (_dragging) {
         snapPropBack(prop)
         setTimeout(function () {
           prop.removeAttribute('data-drag-active')
           if (instrEl) instrEl.style.display = ''
         }, SNAP_BACK_MS)
+        _endDrag()
       }
-
-      _endDrag()
-    }, { signal: propSig })
-
-    prop.addEventListener('pointercancel', function (e) {
-      if (!_dragging || !e.isPrimary) return
-      snapPropBack(prop)
-      setTimeout(function () {
-        prop.removeAttribute('data-drag-active')
-        if (instrEl) instrEl.style.display = ''
-      }, SNAP_BACK_MS)
-      _endDrag()
     }, { signal: propSig })
 
     // ── Remove button (one per zone) ───────────────────────────────────────────
