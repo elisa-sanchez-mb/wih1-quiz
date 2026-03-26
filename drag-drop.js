@@ -1036,17 +1036,13 @@
           var cy = event.clientY || lastDragY
           var targetZone = null
 
-          // Use pendingZone (last zone entered via normal movement) if still within 25px
+          // Trust pendingZone unconditionally — it was set during intentional movement
+          // (the 100px jump guard in syncActiveZone already filtered out finger-lift drift)
           if (pendingZone && !placed && !locked) {
-            var rp = pendingZone.getBoundingClientRect()
-            var px = Math.max(rp.left, Math.min(rp.right,  cx))
-            var py = Math.max(rp.top,  Math.min(rp.bottom, cy))
-            if (Math.sqrt(Math.pow(cx - px, 2) + Math.pow(cy - py, 2)) <= 25) {
-              targetZone = pendingZone
-            }
+            targetZone = pendingZone
           }
 
-          // Gap fallback: released between zones — find nearest zone within 25px
+          // Gap fallback: only when cursor never entered any zone during the drag
           if (!targetZone && !placed && !locked) {
             var best = Infinity
             qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
