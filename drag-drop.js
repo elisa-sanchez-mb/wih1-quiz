@@ -753,7 +753,7 @@
 
   var SNAP_BACK_MS = 350
   var SNAP_TO_MS   = 250
-  var OVERLAP      = 0.3
+  var OVERLAP      = 'pointer'  // cursor must be inside zone — element overlap unusable because the prop (540×670px) covers all zones (76px tall) simultaneously
 
   // ─── PROP REPARENTING ─────────────────────────────────────────────────────────
   // CSS transforms on any ancestor break position:fixed (fixed becomes relative
@@ -1055,14 +1055,13 @@
           liftPropToBody(prop)                            // capture natural rect BEFORE CSS scale
           prop.setAttribute('data-drag-active', 'true')  // scale now applies to correctly-sized fixed element
 
-          // Center the prop's layout box under the pointer so dragging
-          // feels anchored to the cursor regardless of where the user grabbed.
-          var w          = parseFloat(prop.style.width)  || prop.offsetWidth
-          var h          = parseFloat(prop.style.height) || prop.offsetHeight
-          var originLeft = parseFloat(prop.dataset.originLeft) || 0
-          var originTop  = parseFloat(prop.dataset.originTop)  || 0
-          var initX      = event.clientX - originLeft - w / 2
-          var initY      = event.clientY - originTop  - h / 2
+          // Center the visual (scaled) prop under the pointer.
+          // getBoundingClientRect() is called AFTER data-drag-active so the
+          // measurement reflects the CSS scale and transform-origin, giving the
+          // correct visual centre regardless of what transform-origin the CSS uses.
+          var vr    = prop.getBoundingClientRect()
+          var initX = event.clientX - (vr.left + vr.width  / 2)
+          var initY = event.clientY - (vr.top  + vr.height / 2)
           setPropPos(prop, initX, initY)
 
           qEl.classList.add('csg-design-system---makebuild--is-dragging')               // CSS hook: .is-dragging .wih1_drop-zone_dragging
