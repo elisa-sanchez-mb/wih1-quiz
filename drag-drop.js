@@ -1074,12 +1074,30 @@
           setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
           syncActiveZone(event.clientX, event.clientY)
         },
-        end: function () {
+        end: function (event) {
           if (!dropHandled) {
-            if (pendingZone && !placed && !locked) {
-              // interact.js overlap check missed (prop small at 40% scale, cursor at
-              // zone edge) but elementFromPoint confirmed the zone — execute drop.
-              executeDrop(pendingZone)
+            var targetZone = pendingZone
+            // Gap-tolerance fallback: cursor may have released in the ~16px gap
+            // between zones where elementFromPoint returns nothing inside a zone.
+            // Scan all zone rects and snap to nearest within 10px vertically.
+            if (!targetZone && !placed && !locked && event) {
+              var cx = event.clientX
+              var cy = event.clientY
+              var bestDist = Infinity
+              qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+                if (z.getAttribute('data-filled')) return
+                var r = z.getBoundingClientRect()
+                if (cx >= r.left && cx <= r.right) {
+                  var vertDist = cy < r.top ? r.top - cy : cy > r.bottom ? cy - r.bottom : 0
+                  if (vertDist <= 10 && vertDist < bestDist) {
+                    bestDist  = vertDist
+                    targetZone = z
+                  }
+                }
+              })
+            }
+            if (targetZone && !placed && !locked) {
+              executeDrop(targetZone)
             } else {
               // Genuine no-drop — snap back; CSS opacity:0 takes over after animation
               snapPropBack(prop)
