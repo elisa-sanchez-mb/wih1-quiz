@@ -480,6 +480,38 @@
     swapLogo(qEl, 'answer')  // no-op when initial-logo/answer-logo aren't present
   }
 
+  // ─── FADE OUT PROP + REVEAL IMAGE ────────────────────────────────────────────
+  // Shared by onSubmit and onTimeout.
+
+  var ANIM_TRANS = 'opacity 650ms cubic-bezier(0.25,0.1,0.25,1), filter 650ms cubic-bezier(0.25,0.1,0.25,1)'
+
+  function fadeOutAndReveal (qEl) {
+    var prop    = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
+    var dragImg = qEl.querySelector('.csg-design-system---makebuild--quiz_drag_img')
+    if (prop) {
+      prop.style.transition = ANIM_TRANS
+      prop.style.opacity    = '0'
+      prop.style.filter     = 'blur(10px)'
+      setTimeout(function () { hide(prop) }, 650)
+    }
+    if (dragImg) {
+      dragImg.style.transition = ANIM_TRANS
+      dragImg.style.opacity    = '0'
+    }
+    var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
+    if (reveal) {
+      reveal.style.display    = 'block'
+      reveal.style.opacity    = '0'
+      reveal.style.filter     = 'blur(10px)'
+      reveal.style.transition = ANIM_TRANS
+      reveal.setAttribute('data-visibility', '1')
+      reveal.removeAttribute('hidden')
+      reveal.getBoundingClientRect()   // force reflow before transition starts
+      reveal.style.opacity = '1'
+      reveal.style.filter  = 'blur(0px)'
+    }
+  }
+
   // ─── SUBMIT ───────────────────────────────────────────────────────────────────
 
   function onSubmit () {
@@ -504,37 +536,7 @@
     showFeedback(qEl, isCorrect, points)
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   false)
-
-    var animTrans = 'opacity 650ms cubic-bezier(0.25,0.1,0.25,1), filter 650ms cubic-bezier(0.25,0.1,0.25,1)'
-
-    // Fade out prop + static slot image — same animation as logos in quiz.js
-    var prop    = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
-    var dragImg = qEl.querySelector('.csg-design-system---makebuild--quiz_drag_img')
-    if (prop) {
-      prop.style.transition = animTrans
-      prop.style.opacity    = '0'
-      prop.style.filter     = 'blur(10px)'
-      setTimeout(function () { hide(prop) }, 650)
-    }
-    if (dragImg) {
-      dragImg.style.transition = animTrans
-      dragImg.style.opacity    = '0'
-    }
-
-    // Fade in reveal — mirror of the logo fade-in in quiz.js
-    var reveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
-    if (reveal) {
-      reveal.style.display    = 'block'
-      reveal.style.opacity    = '0'
-      reveal.style.filter     = 'blur(10px)'
-      reveal.style.transition = animTrans
-      reveal.setAttribute('data-visibility', '1')
-      reveal.removeAttribute('hidden')
-      // Force reflow so the starting state is painted before the transition begins
-      reveal.getBoundingClientRect()
-      reveal.style.opacity = '1'
-      reveal.style.filter  = 'blur(0px)'
-    }
+    fadeOutAndReveal(qEl)
   }
 
   // ─── TIMEOUT ──────────────────────────────────────────────────────────────────
@@ -549,36 +551,7 @@
     showFeedback(qEl, false, 0)
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   true)  // timeout overlay's own button handles navigation
-
-    var animTrans = 'opacity 650ms cubic-bezier(0.25,0.1,0.25,1), filter 650ms cubic-bezier(0.25,0.1,0.25,1)'
-
-    // Fade out prop + static slot image (mirrors onSubmit)
-    var timeoutProp    = qEl.querySelector('.csg-design-system---makebuild--quiz-prop')
-    var timeoutDragImg = qEl.querySelector('.csg-design-system---makebuild--quiz_drag_img')
-    if (timeoutProp) {
-      timeoutProp.style.transition = animTrans
-      timeoutProp.style.opacity    = '0'
-      timeoutProp.style.filter     = 'blur(10px)'
-      setTimeout(function () { hide(timeoutProp) }, 650)
-    }
-    if (timeoutDragImg) {
-      timeoutDragImg.style.transition = animTrans
-      timeoutDragImg.style.opacity    = '0'
-    }
-
-    // Fade in reveal image (mirrors onSubmit)
-    var timeoutReveal = qEl.querySelector('.csg-design-system---makebuild--quiz-show-reveal')
-    if (timeoutReveal) {
-      timeoutReveal.style.display    = 'block'
-      timeoutReveal.style.opacity    = '0'
-      timeoutReveal.style.filter     = 'blur(10px)'
-      timeoutReveal.style.transition = animTrans
-      timeoutReveal.setAttribute('data-visibility', '1')
-      timeoutReveal.removeAttribute('hidden')
-      timeoutReveal.getBoundingClientRect()
-      timeoutReveal.style.opacity = '1'
-      timeoutReveal.style.filter  = 'blur(0px)'
-    }
+    fadeOutAndReveal(qEl)
 
     // Populate and show the timeout overlay
     if (timeoutOverlay) {
@@ -998,18 +971,8 @@
       }
     }
 
-    // ── Shared drop executor ──────────────────────────────────────────────────
-    // Called by ondrop (interact.js path) and by end() as a fallback when the
-    // overlap check misses (e.g. prop is small at 40% scale and cursor is near
-    // a zone edge — elementFromPoint confirms the zone but overlap < threshold).
-    function executeDrop (zone) {
-      if (placed || locked) return
-      dropHandled    = true
-      pendingZone    = null
-      activeDropZone = null
-      zone.removeAttribute('data-drag-over')
-      prop.classList.remove('prop--over-zone')
-
+    // ── Shared drop state + UI (pointer and keyboard paths) ───────────────────
+    function finalizeDrop (zone) {
       placed         = true
       selectedLogoId = zone.dataset.dropBg
       zone.setAttribute('data-filled', 'true')
@@ -1022,36 +985,47 @@
         }
       })
 
-      // Snap prop to previewWrap centre, then reveal the existing preview img
-      var previewWrap = zone.querySelector('[data-drop-element="previewWrap"]')
-      var previewImg  = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
-      var snapTarget  = previewWrap || zone
-      snapPropToZone(prop, snapTarget)
-
-      setTimeout(function () {
-        if (previewImg) {
-          var srcEl  = dragImg || prop
-          previewImg.src = srcEl.src
-          var srcset = srcEl.getAttribute('srcset')
-          var sizes  = srcEl.getAttribute('sizes')
-          if (srcset) previewImg.setAttribute('srcset', srcset)
-          if (sizes)  previewImg.setAttribute('sizes',  sizes)
-          previewImg.style.opacity = '1'
-        }
-        restorePropToFlow(prop)
-        prop.removeAttribute('data-drag-active')  // CSS: opacity:0
-      }, SNAP_TO_MS)
-
-      // Show remove button
+      // Show remove button and mark answer logos
       var removeEl = zone.querySelector('[data-drop-element="remove"]')
       if (removeEl) removeEl.style.opacity = '1'
-
-      // Mark answer logo as selected
       qels('answer', qEl).forEach(function (btn) {
         btn.setAttribute('data-selected', btn.dataset.logoId === selectedLogoId ? 'true' : 'false')
       })
-
       setDisabled(getSubmitBtn(), false)
+    }
+
+    // ── Set preview image src/srcset/sizes ─────────────────────────────────────
+    function setPreviewImg (zone) {
+      var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
+      if (!previewImg) return
+      var srcEl  = dragImg || prop
+      previewImg.src = srcEl.src
+      var srcset = srcEl.getAttribute('srcset')
+      var sizes  = srcEl.getAttribute('sizes')
+      if (srcset) previewImg.setAttribute('srcset', srcset)
+      if (sizes)  previewImg.setAttribute('sizes',  sizes)
+      previewImg.style.opacity = '1'
+    }
+
+    // ── Pointer drop (snap animation, then restore prop to flow) ───────────────
+    // Called by ondrop (interact.js) and by end() when the overlap check misses.
+    function executeDrop (zone) {
+      if (placed || locked) return
+      dropHandled    = true
+      pendingZone    = null
+      activeDropZone = null
+      zone.removeAttribute('data-drag-over')
+      prop.classList.remove('prop--over-zone')
+
+      finalizeDrop(zone)
+
+      var snapTarget = zone.querySelector('[data-drop-element="previewWrap"]') || zone
+      snapPropToZone(prop, snapTarget)
+      setTimeout(function () {
+        setPreviewImg(zone)
+        restorePropToFlow(prop)
+        prop.removeAttribute('data-drag-active')  // CSS: opacity:0
+      }, SNAP_TO_MS)
     }
 
     // ── Draggable (quiz-prop) ──────────────────────────────────────────────────
@@ -1095,19 +1069,11 @@
             var cy = (event && event.clientY) || lastDragY
             var targetZone = null
 
-            // Overshoot protection for the topmost zone:
-            // If pendingZone changed in the last 200ms due to a large downward jump
-            // (>100px) and prevPendingZone was the topmost visible zone, the user's
-            // finger likely drifted downward while lifting — revert to the topmost zone.
-            if (!targetZone && !placed && !locked && prevPendingZone && pendingZone && lastZoneJumpY > 100) {
-              var timeAtCurrentZone = Date.now() - pendingZoneEnteredAt
-              if (timeAtCurrentZone < 200) {
-                var visibleZones = Array.from(qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')).filter(function (z) { return z.getBoundingClientRect().width > 0 })
-                var topmostZone  = visibleZones.reduce(function (min, z) { return !min || z.getBoundingClientRect().top < min.getBoundingClientRect().top ? z : min }, null)
-                if (prevPendingZone === topmostZone) {
-                  targetZone = prevPendingZone  // overshoot: prefer topmost zone
-                }
-              }
+            // Overshoot protection: if pendingZone changed <200ms ago via a large
+            // downward jump (>100px), finger likely drifted while lifting — prefer
+            // the previous zone.
+            if (prevPendingZone && lastZoneJumpY > 100 && Date.now() - pendingZoneEnteredAt < 200) {
+              targetZone = prevPendingZone
             }
 
             // pendingZone is sticky (last zone the cursor was over). Verify it is
@@ -1285,16 +1251,12 @@
       zone.setAttribute('tabIndex', '-1')
       zone.setAttribute('aria-label', 'Drop on ' + kbZoneLabel(zone))
       zone.setAttribute('aria-pressed', 'false')
-    })
 
-    // Remove buttons need to be keyboard-activatable (they may be plain divs)
-    kbZones.forEach(function (zone) {
       var rem = zone.querySelector('[data-drop-element="remove"]')
-      if (!rem) return
-      if (!rem.getAttribute('role')) rem.setAttribute('role', 'button')
-      rem.setAttribute('tabIndex', '-1')  // shown only when zone is filled
-      if (!rem.getAttribute('aria-label')) {
-        rem.setAttribute('aria-label', 'Remove ' + showLabel + ' from ' + kbZoneLabel(zone))
+      if (rem) {
+        if (!rem.getAttribute('role'))      rem.setAttribute('role', 'button')
+        if (!rem.getAttribute('aria-label')) rem.setAttribute('aria-label', 'Remove ' + showLabel + ' from ' + kbZoneLabel(zone))
+        rem.setAttribute('tabIndex', '-1')
       }
     })
 
@@ -1362,10 +1324,9 @@
       kbGrabbed = false
       propWrap.removeAttribute('data-kb-grabbed')
       prop.setAttribute('aria-grabbed', 'false')
-      prop.setAttribute('tabIndex', '-1')  // placed; no longer interactive
+      prop.setAttribute('tabIndex', '-1')
       prop.setAttribute('aria-label', showLabel + ' — placed. Tab to the remove button to try again.')
 
-      // Collapse all zones back out of tab order, update ARIA
       kbZones.forEach(function (z) {
         z.setAttribute('tabIndex', '-1')
         z.removeAttribute('data-drag-over')
@@ -1373,48 +1334,13 @@
         z.setAttribute('aria-pressed', z === zone ? 'true' : 'false')
       })
 
-      // ── Shared drop logic (mirrors pointer ondrop) ────────────────────────
-      placed         = true
-      selectedLogoId = zone.dataset.dropBg
-      zone.setAttribute('data-filled', 'true')
+      finalizeDrop(zone)
+      setPreviewImg(zone)  // immediate — no snap animation in keyboard mode
 
-      // Dim other zones
-      kbZones.forEach(function (z) {
-        if (z !== zone) {
-          z.style.transition = 'opacity 0.3s ease'
-          z.style.opacity    = '0.5'
-        }
-      })
-
-      // Reveal preview image immediately (no snap animation in keyboard mode)
-      var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
-      if (previewImg) {
-        var srcEl  = dragImg || prop
-        previewImg.src = srcEl.src
-        var srcset = srcEl.getAttribute('srcset')
-        var sizes  = srcEl.getAttribute('sizes')
-        if (srcset) previewImg.setAttribute('srcset', srcset)
-        if (sizes)  previewImg.setAttribute('sizes',  sizes)
-        previewImg.style.opacity = '1'
-      }
-
-      // Show remove button and bring it into tab order
       var remEl = zone.querySelector('[data-drop-element="remove"]')
-      if (remEl) {
-        remEl.style.opacity = '1'
-        remEl.setAttribute('tabIndex', '0')
-        remEl.focus()
-      } else {
-        var sb = getSubmitBtn()
-        if (sb) sb.focus()
-      }
+      if (remEl) { remEl.setAttribute('tabIndex', '0'); remEl.focus() }
+      else { var sb = getSubmitBtn(); if (sb) sb.focus() }
 
-      // Mark answer buttons
-      qels('answer', qEl).forEach(function (btn) {
-        btn.setAttribute('data-selected', btn.dataset.logoId === selectedLogoId ? 'true' : 'false')
-      })
-
-      setDisabled(getSubmitBtn(), false)
       announceKb(showLabel + ' placed on ' + kbZoneLabel(zone) + '. Press Tab to submit, or activate Remove to try again.')
     }
 
@@ -1432,7 +1358,6 @@
         else if (e.key === 'Escape') { e.preventDefault(); kbCancel() }
       }, { signal: kbSig })
 
-      // Show gradient on the focused zone during a grab (reuses existing CSS)
       zone.addEventListener('focus', function () {
         if (!kbGrabbed) return
         kbZones.forEach(function (z) {
@@ -1444,36 +1369,27 @@
         if (!kbGrabbed) return
         zone.setAttribute('data-drag-over', 'ready')
       }, { signal: kbSig })
-    })
 
-    // Remove buttons: Enter / Space → click (they may not be native buttons)
-    // A second click listener also resets prop ARIA/tabIndex after any remove
-    // (pointer or keyboard) so the user can drag again.
-    kbZones.forEach(function (zone) {
+      // Remove button: keyboard activation + ARIA restore after any remove
       var remEl = zone.querySelector('[data-drop-element="remove"]')
-      if (!remEl) return
+      if (remEl) {
+        remEl.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remEl.click() }
+        }, { signal: kbSig })
 
-      // Enter / Space → synthesise a click so the existing pointer handler runs
-      remEl.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remEl.click() }
-      }, { signal: kbSig })
-
-      // After any remove (pointer or keyboard): restore prop to draggable state
-      remEl.addEventListener('click', function () {
-        prop.setAttribute('tabIndex', '0')
-        prop.setAttribute('aria-grabbed', 'false')
-        prop.setAttribute('aria-label', showLabel + ' — press Enter or Space to pick up')
-        propWrap.removeAttribute('data-kb-grabbed')
-        zone.setAttribute('aria-pressed', 'false')
-        // Re-enable remove button tabIndex=0 so it's focusable if filled again;
-        // it will be hidden by CSS (opacity:0) until needed.
-        remEl.setAttribute('tabIndex', '-1')
-        // Return focus to prop if keyboard is driving (focus is inside the zone)
-        if (zone.contains(document.activeElement) || document.activeElement === remEl) {
-          prop.focus()
-          announceKb(showLabel + ' removed. Press Enter to pick up and try again.')
-        }
-      }, { signal: kbSig })
+        remEl.addEventListener('click', function () {
+          prop.setAttribute('tabIndex', '0')
+          prop.setAttribute('aria-grabbed', 'false')
+          prop.setAttribute('aria-label', showLabel + ' — press Enter or Space to pick up')
+          propWrap.removeAttribute('data-kb-grabbed')
+          zone.setAttribute('aria-pressed', 'false')
+          remEl.setAttribute('tabIndex', '-1')
+          if (zone.contains(document.activeElement) || document.activeElement === remEl) {
+            prop.focus()
+            announceKb(showLabel + ' removed. Press Enter to pick up and try again.')
+          }
+        }, { signal: kbSig })
+      }
     })
 
     // Global Escape while grabbed (catches Escape outside any specific zone)
