@@ -2,8 +2,6 @@
   'use strict'
 
   // ─── DOUBLE-INIT GUARD ───────────────────────────────────────────────────────
-  // drag-drop.js is loaded twice on this page (once before interact.js, once
-  // after).  Only the first successful initialisation should run.
   if (window.__wih1DragDropReady) return
 
   // ─── OVERVIEW ────────────────────────────────────────────────────────────────
@@ -24,15 +22,6 @@
   //
   // Question detection: uses [data-quiz-element="question"] if present,
   //   otherwise falls back to .wih1-quiz_item (this page's structure).
-
-  // ─── WAIT FOR INTERACT.JS ────────────────────────────────────────────────────
-  // interact.js loads after this script on the current page.  Poll until ready.
-  function waitForInteract (cb) {
-    if (typeof interact !== 'undefined') { cb(); return }
-    var t = setInterval(function () {
-      if (typeof interact !== 'undefined') { clearInterval(t); cb() }
-    }, 20)
-  }
 
   // ─── ELEMENT HELPERS (quiz.js convention) ────────────────────────────────────
 
@@ -231,7 +220,8 @@
   var selectedLogoId = null   // logo-id the prop is currently resting on
 
   // ─── KEYBOARD A11Y STATE ──────────────────────────────────────────────────────
-  var _kbAbortCtrl = null  // AbortController; aborted & replaced on each initQuestion
+  var _kbAbortCtrl  = null  // AbortController; aborted & replaced on each initQuestion
+  var _propAbortCtrl = null  // AbortController for prop pointer-event listeners
   var _kbLockFn    = null  // fn to silently freeze kb state when quiz locks (submit/timeout)
   var _kbAnnouncer = null  // shared aria-live region for screen reader announcements
 
@@ -726,7 +716,6 @@
 
   var SNAP_BACK_MS = 350
   var SNAP_TO_MS   = 250
-  var OVERLAP      = 'pointer'  // cursor must be inside zone — element overlap unusable because the prop (540×670px) covers all zones (76px tall) simultaneously
 
   // ─── PROP REPARENTING ─────────────────────────────────────────────────────────
   // CSS transforms on any ancestor break position:fixed (fixed becomes relative
@@ -915,60 +904,32 @@
       zoneEls.forEach(function (z) { zonesParent.appendChild(z) })
     }
 
-    // ── Tear down stale interact.js bindings ───────────────────────────────────
-    try { interact(prop).unset() } catch (_) {}
-    qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
-      try { interact(zone).unset() } catch (_) {}
-    })
-
     // ── Per-gesture flags ──────────────────────────────────────────────────────
-    var placed              = false  // true after a successful drop; cleared by remove
-    var dropHandled         = false  // true when ondrop fired during the current gesture
-    var activeDropZone      = null   // zone under cursor per syncActiveZone
-    var pendingZone         = null   // sticky: only updated on zone ENTRY
-    var prevPendingZone     = null   // pendingZone before last zone change (overshoot detection)
-    var pendingZoneEnteredAt = 0     // timestamp when pendingZone last changed
-    var lastZoneJumpY       = 0      // cursor y-delta at moment pendingZone last changed
-    var lastDragX           = 0      // last known cursor position — used as fallback in end()
-    var lastDragY           = 0      // because touch end events sometimes have clientX/Y = 0
-    var prevDragY           = 0      // y from previous move, for jump-size detection
+    var placed         = false   // true after a successful drop; cleared by remove
+    var activeDropZone = null    // zone under cursor, tracked by syncActiveZone
+    var _dragging      = false   // true while a pointer drag is in progress
+    var _lastPX        = 0       // pointer position from previous pointermove (for dx/dy)
+    var _lastPY        = 0
 
     // ── Pointer-position zone tracker ─────────────────────────────────────────
-    // Drives activeDropZone and data-drag-over from the actual cursor position
-    // rather than interact.js overlap geometry, which can misfire when zones are
-    // close together or when the scaled prop's bounding rect straddles two zones.
+    // Uses elementFromPoint (with pointer-events:none on the prop so it looks
+    // through it) to find which zone is under the cursor.  Called on every
+    // pointermove and once more on pointerup with the exact release coordinates.
     function syncActiveZone (clientX, clientY) {
-      // Temporarily suppress pointer-events on the prop so elementFromPoint
-      // looks through it to whatever is beneath (the zone, or nothing).
       var prevPE = prop.style.pointerEvents
       prop.style.pointerEvents = 'none'
-      var el  = document.elementFromPoint(clientX, clientY)
+      var el = document.elementFromPoint(clientX, clientY)
       prop.style.pointerEvents = prevPE
 
-      var hit = el
-        ? el.closest('.csg-design-system---makebuild--wih1_drop-zone_wrap')
-        : null
-
+      var hit = el ? el.closest('.csg-design-system---makebuild--wih1_drop-zone_wrap') : null
       if (hit === activeDropZone) return   // nothing changed — skip DOM writes
 
       activeDropZone = hit
-      // pendingZone is sticky: only update when entering a zone, never when leaving.
-      // Track the previous zone and jump size so end() can detect overshoot.
-      if (hit !== null && hit !== pendingZone) {
-        prevPendingZone      = pendingZone
-        lastZoneJumpY        = clientY - prevDragY
-        pendingZoneEnteredAt = Date.now()
-        pendingZone          = hit
-      }
-      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
-        .forEach(function (z) {
-          z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
-        })
-      if (hit) {
-        prop.classList.add('prop--over-zone')
-      } else {
-        prop.classList.remove('prop--over-zone')
-      }
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+        z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
+      })
+      if (hit) prop.classList.add('prop--over-zone')
+      else     prop.classList.remove('prop--over-zone')
     }
 
     // ── Shared drop state + UI (pointer and keyboard paths) ───────────────────
@@ -1008,7 +969,7 @@
     }
 
     // ── Pointer drop (snap animation, then restore prop to flow) ───────────────
-    // Called by ondrop (interact.js) and by end() when the overlap check misses.
+    // Called by pointerup (and pointerup's gap fallback).
     function executeDrop (zone) {
       if (placed || locked) return
       dropHandled    = true
@@ -1028,179 +989,146 @@
       }, SNAP_TO_MS)
     }
 
-    // ── Draggable (quiz-prop) ──────────────────────────────────────────────────
-    interact(prop).draggable({
-      inertia:    false,
-      autoScroll: true,
-      modifiers: [
-        interact.modifiers.restrictRect({ restriction: 'body', endOnly: true })
-      ],
-      listeners: {
-        start: function (event) {
-          if (locked || placed) { event.interaction.stop(); return }
-          liftPropToBody(prop)                            // capture natural rect BEFORE CSS scale
-          prop.setAttribute('data-drag-active', 'true')  // scale now applies to correctly-sized fixed element
+    // ── Draggable — native pointer events ─────────────────────────────────────
+    // Replaces interact.js entirely.  pointerup always carries valid clientX/Y,
+    // so we call syncActiveZone one final time at release to get the exact zone
+    // under the finger — no stale-state, no overshoot machinery needed.
 
-          // Center the visual (scaled) prop under the pointer.
-          // getBoundingClientRect() is called AFTER data-drag-active so the
-          // measurement reflects the CSS scale and transform-origin, giving the
-          // correct visual centre regardless of what transform-origin the CSS uses.
-          var vr    = prop.getBoundingClientRect()
-          var initX = event.clientX - (vr.left + vr.width  / 2)
-          var initY = event.clientY - (vr.top  + vr.height / 2)
-          setPropPos(prop, initX, initY)
+    if (_propAbortCtrl) _propAbortCtrl.abort()
+    _propAbortCtrl = new AbortController()
+    var propSig = _propAbortCtrl.signal
 
-          qEl.classList.add('csg-design-system---makebuild--is-dragging')               // CSS hook: .is-dragging .wih1_drop-zone_dragging
-          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
-          if (instrEl) instrEl.style.display = 'none'
-        },
-        move: function (event) {
-          if (locked) { snapPropBack(prop); return }
-          var pos = getPropPos(prop)
-          setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
-          prevDragY = lastDragY
-          lastDragX = event.clientX
-          lastDragY = event.clientY
-          syncActiveZone(event.clientX, event.clientY)
-        },
-        end: function (event) {
-          if (!dropHandled) {
-            var cx = (event && event.clientX) || lastDragX
-            var cy = (event && event.clientY) || lastDragY
-            var targetZone = null
+    function _endDrag () {
+      _dragging      = false
+      activeDropZone = null
+      qEl.classList.remove('csg-design-system---makebuild--is-dragging')
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.remove('is-dragging') })
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+        z.removeAttribute('data-drag-over')
+        removeZoneBorder(z)
+      })
+    }
 
-            // Overshoot protection: if pendingZone changed <200ms ago via a large
-            // downward jump (>100px), finger likely drifted while lifting — prefer
-            // the previous zone.
-            if (prevPendingZone && lastZoneJumpY > 100 && Date.now() - pendingZoneEnteredAt < 200) {
-              targetZone = prevPendingZone
-            }
+    prop.addEventListener('pointerdown', function (e) {
+      if (locked || placed || !e.isPrimary || e.button > 0) return
+      e.preventDefault()
+      prop.setPointerCapture(e.pointerId)
 
-            // pendingZone is sticky (last zone the cursor was over). Verify it is
-            // still within 25px of the release point so dragging far away snaps back.
-            if (!targetZone && pendingZone && !placed && !locked) {
-              var rp = pendingZone.getBoundingClientRect()
-              var clampedPX = Math.max(rp.left, Math.min(rp.right,  cx))
-              var clampedPY = Math.max(rp.top,  Math.min(rp.bottom, cy))
-              var pendingDist = Math.sqrt(Math.pow(cx - clampedPX, 2) + Math.pow(cy - clampedPY, 2))
-              if (pendingDist <= 25) targetZone = pendingZone
-            }
+      liftPropToBody(prop)
+      prop.setAttribute('data-drag-active', 'true')
 
-            // Distance-based fallback: handles the case where cursor was never over
-            // a zone (e.g. released directly into a gap without crossing a zone).
-            if (!targetZone && !placed && !locked) {
-              var bestDist = Infinity
-              qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
-                if (z.getAttribute('data-filled')) return
-                var r = z.getBoundingClientRect()
-                var clampedX = Math.max(r.left, Math.min(r.right,  cx))
-                var clampedY = Math.max(r.top,  Math.min(r.bottom, cy))
-                var dist = Math.sqrt(Math.pow(cx - clampedX, 2) + Math.pow(cy - clampedY, 2))
-                if (dist <= 25 && dist < bestDist) {
-                  bestDist   = dist
-                  targetZone = z
-                }
-              })
-            }
+      // Centre the scaled prop under the pointer (measure AFTER data-drag-active so CSS scale is applied)
+      var vr = prop.getBoundingClientRect()
+      setPropPos(prop, e.clientX - (vr.left + vr.width / 2), e.clientY - (vr.top + vr.height / 2))
 
-            if (targetZone && !placed && !locked) {
-              executeDrop(targetZone)
-            } else {
-              // Genuine no-drop — snap back; CSS opacity:0 takes over after animation
-              snapPropBack(prop)
-              setTimeout(function () {
-                prop.removeAttribute('data-drag-active')
-                if (instrEl) instrEl.style.display = ''
-              }, SNAP_BACK_MS)
-            }
-          }
-          pendingZone = null  // always clear after gesture ends
-          // Remove dragging state immediately on gesture end (drop or no-drop)
-          qEl.classList.remove('csg-design-system---makebuild--is-dragging')
-          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.remove('is-dragging') })
-          // Drop case: data-drag-active removed inside executeDrop's setTimeout
-          dropHandled = false
-        }
-      }
-    })
+      _lastPX   = e.clientX
+      _lastPY   = e.clientY
+      _dragging = true
 
-    // ── Drop zones (.wih1_drop-zone_wrap) ─────────────────────────────────────
-    qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
-
-      interact(zone).dropzone({
-        accept:  '.csg-design-system---makebuild--quiz-prop',
-        overlap: OVERLAP,
-
-        ondropactivate: function () {
-          zone.setAttribute('data-drag-over', 'ready')
-          addZoneBorder(zone)   // show dashed border on ALL zones when drag starts
-        },
-        // ondragenter / ondragleave removed — activeDropZone and data-drag-over
-        // are now driven by syncActiveZone() in the move listener, which uses
-        // document.elementFromPoint for pixel-accurate zone detection instead of
-        // interact.js's overlap geometry (which misfires with adjacent zones).
-        ondrop: function () {
-          // Guard: only the zone matching activeDropZone (cursor-based) may process
-          // the drop. interact.js can fire ondrop on multiple zones when their rects
-          // are close — this ensures only the one under the cursor wins.
-          if (placed || zone !== activeDropZone) return
-          // Overshoot: if pendingZone changed <200ms ago via a large downward jump,
-          // skip ondrop and let end() apply the overshoot correction instead.
-          if (prevPendingZone && lastZoneJumpY > 100 && Date.now() - pendingZoneEnteredAt < 200) return
-          executeDrop(zone)
-        },
-        ondropdeactivate: function () {
-          if (activeDropZone === zone) activeDropZone = null  // clean up for missed drops
-          zone.removeAttribute('data-drag-over')
-          removeZoneBorder(zone)
-        }
+      qEl.classList.add('csg-design-system---makebuild--is-dragging')
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop_preview').forEach(function (p) { p.classList.add('is-dragging') })
+      qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+        z.setAttribute('data-drag-over', 'ready')
+        addZoneBorder(z)
       })
 
-      // ── Remove button ──────────────────────────────────────────────────────
-      var removeEl = zone.querySelector('[data-drop-element="remove"]')
-      if (removeEl) {
-        // Clone to clear any stale listeners from previous questions
-        var freshRemove = removeEl.cloneNode(true)
-        removeEl.parentNode.replaceChild(freshRemove, removeEl)
-        freshRemove.addEventListener('click', function () {
-          if (locked) return
+      if (instrEl) instrEl.style.display = 'none'
+      syncActiveZone(e.clientX, e.clientY)
+    }, { signal: propSig })
 
-          // Hide the preview image
-          var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
-          if (previewImg) {
-            previewImg.src           = ''
-            previewImg.style.opacity = '0'
-          }
+    prop.addEventListener('pointermove', function (e) {
+      if (!_dragging || !e.isPrimary) return
+      if (locked) { snapPropBack(prop); _endDrag(); return }
+      e.preventDefault()
 
-          // Hide remove button and clear feedback state
-          freshRemove.style.opacity = '0'
-          freshRemove.removeAttribute('data-feedback-correct')
+      var pos = getPropPos(prop)
+      setPropPos(prop, pos.x + (e.clientX - _lastPX), pos.y + (e.clientY - _lastPY))
+      _lastPX = e.clientX
+      _lastPY = e.clientY
 
-          // quiz_drag_img is untouched — it never moved
-          if (instrEl) instrEl.style.display = ''
+      syncActiveZone(e.clientX, e.clientY)
+    }, { signal: propSig })
 
-          // Reset answer selection
-          qels('answer', qEl).forEach(function (btn) {
-            btn.setAttribute('data-selected', 'false')
-          })
+    prop.addEventListener('pointerup', function (e) {
+      if (!_dragging || !e.isPrimary) return
+      e.preventDefault()
 
-          // Restore zone opacities; fully clean the previously-filled zone so
-          // interact.js doesn't carry stale hover/border state into the next drag
-          zone.removeAttribute('data-filled')
-          zone.removeAttribute('data-drag-over')   // clear any stale hover state
-          _removeBorderFromEl(zone)                // remove dashed border if still present
-          qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
-            z.style.transition = 'opacity 0.3s ease'
-            z.style.opacity    = ''
-          })
+      // One final sync with the exact release coordinates — pointerup always has
+      // valid clientX/Y, so this is the definitive answer: drop or no-drop.
+      syncActiveZone(e.clientX, e.clientY)
 
-          // Reset state so the user can drag again
-          activeDropZone = null   // safety: ensure ondrop guard starts clean
-          selectedLogoId = null
-          placed         = false
-          setDisabled(getSubmitBtn(), true)
+      var targetZone = activeDropZone
+
+      // Gap fallback: if the release point isn't inside a zone, accept it if it
+      // lands within 25px of a zone edge (handles the narrow inter-zone gaps).
+      if (!targetZone && !placed && !locked) {
+        var bestDist = Infinity
+        qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+          if (z.getAttribute('data-filled')) return
+          var r  = z.getBoundingClientRect()
+          var cx = Math.max(r.left, Math.min(r.right,  e.clientX))
+          var cy = Math.max(r.top,  Math.min(r.bottom, e.clientY))
+          var d  = Math.sqrt(Math.pow(e.clientX - cx, 2) + Math.pow(e.clientY - cy, 2))
+          if (d <= 25 && d < bestDist) { bestDist = d; targetZone = z }
         })
       }
+
+      if (targetZone && !placed && !locked) {
+        executeDrop(targetZone)
+      } else {
+        snapPropBack(prop)
+        setTimeout(function () {
+          prop.removeAttribute('data-drag-active')
+          if (instrEl) instrEl.style.display = ''
+        }, SNAP_BACK_MS)
+      }
+
+      _endDrag()
+    }, { signal: propSig })
+
+    prop.addEventListener('pointercancel', function (e) {
+      if (!_dragging || !e.isPrimary) return
+      snapPropBack(prop)
+      setTimeout(function () {
+        prop.removeAttribute('data-drag-active')
+        if (instrEl) instrEl.style.display = ''
+      }, SNAP_BACK_MS)
+      _endDrag()
+    }, { signal: propSig })
+
+    // ── Remove button (one per zone) ───────────────────────────────────────────
+    qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (zone) {
+      var removeEl = zone.querySelector('[data-drop-element="remove"]')
+      if (!removeEl) return
+      // Clone to clear any stale listeners from previous questions
+      var freshRemove = removeEl.cloneNode(true)
+      removeEl.parentNode.replaceChild(freshRemove, removeEl)
+      freshRemove.addEventListener('click', function () {
+        if (locked) return
+
+        var previewImg = zone.querySelector('.csg-design-system---makebuild--wih1_drop_preview_img')
+        if (previewImg) { previewImg.src = ''; previewImg.style.opacity = '0' }
+
+        freshRemove.style.opacity = '0'
+        freshRemove.removeAttribute('data-feedback-correct')
+
+        if (instrEl) instrEl.style.display = ''
+
+        qels('answer', qEl).forEach(function (btn) { btn.setAttribute('data-selected', 'false') })
+
+        zone.removeAttribute('data-filled')
+        zone.removeAttribute('data-drag-over')
+        _removeBorderFromEl(zone)
+        qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
+          z.style.transition = 'opacity 0.3s ease'
+          z.style.opacity    = ''
+        })
+
+        activeDropZone = null
+        selectedLogoId = null
+        placed         = false
+        setDisabled(getSubmitBtn(), true)
+      })
     })
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1521,7 +1449,7 @@
     setDisabled(getSubmitBtn(), true)
     setDisabled(getNextBtn(),   true)
 
-    // Pre-load q1 (sets up interact.js bindings); timer starts via button handlers above
+    // Pre-load q1; timer starts via button handlers above
     loadQuestion(0, !hasGate)
 
     // Animate splash columns on load (mirrors quiz.js setBaseline → animateSplash)
@@ -1547,10 +1475,8 @@
   }
 
   // ─── EARLY VISIBILITY SETUP ──────────────────────────────────────────────────
-  // Run synchronously — before waitForInteract starts polling — so Webflow's
-  // default data-visibility="1" screens never flash visible on page load.
-  // init() repeats this logic once interact.js is ready; the second pass is a
-  // harmless no-op since the elements are already in the correct state.
+  // Run synchronously so Webflow's default data-visibility="1" screens never
+  // flash visible on page load.  init() repeats this; the second pass is a no-op.
   hide(screenQuiz)
   if (timerWrap)      hide(timerWrap)
   hide(qel('results'))
@@ -1560,6 +1486,6 @@
     if (timerWrap) show(timerWrap)
   }
 
-  waitForInteract(init)
+  init()
 
 })() // end IIFE
