@@ -980,6 +980,7 @@
       // This prevents the gap-scan in end() from preferring the zone BELOW the gap
       // over the zone the cursor just left (both equidistant when in the gap center).
       if (hit !== null) pendingZone = hit
+      console.log('[wih1-drop] syncActiveZone x=' + Math.round(clientX) + ' y=' + Math.round(clientY) + ' → hit=' + (hit ? hit.dataset.dropBg : 'null') + ' pending=' + (pendingZone ? pendingZone.dataset.dropBg : 'null'))
       qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap')
         .forEach(function (z) {
           z.setAttribute('data-drag-over', z === hit ? 'true' : 'ready')
@@ -996,6 +997,7 @@
     // overlap check misses (e.g. prop is small at 40% scale and cursor is near
     // a zone edge — elementFromPoint confirms the zone but overlap < threshold).
     function executeDrop (zone) {
+      console.log('[wih1-drop] executeDrop zone=' + zone.dataset.dropBg)
       if (placed || locked) return
       dropHandled    = true
       pendingZone    = null
@@ -1085,6 +1087,9 @@
           if (!dropHandled) {
             var cx = (event && event.clientX) || lastDragX
             var cy = (event && event.clientY) || lastDragY
+            console.log('[wih1-drop] end cx=' + Math.round(cx) + ' cy=' + Math.round(cy) + ' pending=' + (pendingZone ? pendingZone.dataset.dropBg : 'null') + ' dropHandled=' + dropHandled)
+            // Log zone positions for comparison
+            qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function(z,i){ var r=z.getBoundingClientRect(); if(r.width>0) console.log('[wih1-drop]   zone['+i+']='+z.dataset.dropBg+' y='+Math.round(r.top)+'-'+Math.round(r.bottom)); })
             // pendingZone is sticky (last zone the cursor was over). Verify it is
             // still within 25px of the release point so dragging far away snaps back.
             var targetZone = null
@@ -1093,6 +1098,7 @@
               var clampedPX = Math.max(rp.left, Math.min(rp.right,  cx))
               var clampedPY = Math.max(rp.top,  Math.min(rp.bottom, cy))
               var pendingDist = Math.sqrt(Math.pow(cx - clampedPX, 2) + Math.pow(cy - clampedPY, 2))
+              console.log('[wih1-drop] pendingDist=' + Math.round(pendingDist) + ' to ' + pendingZone.dataset.dropBg + ' → ' + (pendingDist <= 25 ? 'USE' : 'SKIP'))
               if (pendingDist <= 25) targetZone = pendingZone
             }
             // Distance-based fallback: handles the case where cursor was never over
@@ -1151,6 +1157,7 @@
           // Guard: only the zone matching activeDropZone (cursor-based) may process
           // the drop. interact.js can fire ondrop on multiple zones when their rects
           // are close — this ensures only the one under the cursor wins.
+          console.log('[wih1-drop] ondrop zone=' + zone.dataset.dropBg + ' activeDropZone=' + (activeDropZone ? activeDropZone.dataset.dropBg : 'null') + ' placed=' + placed + ' PASS=' + (!placed && zone === activeDropZone))
           if (placed || zone !== activeDropZone) return
           executeDrop(zone)
         },
