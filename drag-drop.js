@@ -954,6 +954,8 @@
     var activeDropZone = null   // zone under cursor per syncActiveZone
     var pendingZone    = null   // same as activeDropZone but NOT cleared by ondropdeactivate,
                                 // so end() can still fall back to it when overlap check misses
+    var lastDragX      = 0      // last known cursor position — used as fallback in end()
+    var lastDragY      = 0      // because touch end events sometimes have clientX/Y = 0
 
     // ── Pointer-position zone tracker ─────────────────────────────────────────
     // Drives activeDropZone and data-drag-over from the actual cursor position
@@ -1072,27 +1074,32 @@
           if (locked) { snapPropBack(prop); return }
           var pos = getPropPos(prop)
           setPropPos(prop, pos.x + event.dx, pos.y + event.dy)
+          lastDragX = event.clientX
+          lastDragY = event.clientY
           syncActiveZone(event.clientX, event.clientY)
         },
         end: function (event) {
           if (!dropHandled) {
             var targetZone = pendingZone
-            // Gap-tolerance fallback: cursor may have released in the ~16px gap
-            // between zones where elementFromPoint returns nothing inside a zone.
-            // Scan all zone rects and snap to nearest within 10px vertically.
-            if (!targetZone && !placed && !locked && event) {
-              var cx = event.clientX
-              var cy = event.clientY
+            // Gap-tolerance fallback: cursor may have released in the inter-zone
+            // gap, above the top zone, or elementFromPoint may have missed (e.g.
+            // a fixed overlay covers the zone). Use the cached last-move position
+            // as fallback for touch events where end clientX/Y can be 0.
+            if (!targetZone && !placed && !locked) {
+              var cx = (event && event.clientX) || lastDragX
+              var cy = (event && event.clientY) || lastDragY
               var bestDist = Infinity
               qEl.querySelectorAll('.csg-design-system---makebuild--wih1_drop-zone_wrap').forEach(function (z) {
                 if (z.getAttribute('data-filled')) return
                 var r = z.getBoundingClientRect()
-                if (cx >= r.left && cx <= r.right) {
-                  var vertDist = cy < r.top ? r.top - cy : cy > r.bottom ? cy - r.bottom : 0
-                  if (vertDist <= 10 && vertDist < bestDist) {
-                    bestDist  = vertDist
-                    targetZone = z
-                  }
+                // Clamp cursor to zone rect and compute distance — catches gaps,
+                // overshoot above top zone, and cursor just outside zone bounds.
+                var clampedX = Math.max(r.left, Math.min(r.right,  cx))
+                var clampedY = Math.max(r.top,  Math.min(r.bottom, cy))
+                var dist = Math.sqrt(Math.pow(cx - clampedX, 2) + Math.pow(cy - clampedY, 2))
+                if (dist <= 25 && dist < bestDist) {
+                  bestDist   = dist
+                  targetZone = z
                 }
               })
             }
