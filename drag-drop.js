@@ -76,8 +76,9 @@
   var screenQuiz = qel('screen-dragdrop') || qel('screen-quiz')
   if (!screenQuiz) return
 
-  var QUESTION_TIME = parseInt(screenQuiz.dataset.quizQuestionTime, 10) || 15
-  var MAX_SCORE     = parseInt(screenQuiz.dataset.quizMaxScore,      10) || 0
+  var QUESTION_TIME  = parseInt(screenQuiz.dataset.quizQuestionTime, 10) || 15
+  var TIME_DELAY     = parseFloat(screenQuiz.dataset.quizTimeDelay || 0) * 1000   // ms
+  var MAX_SCORE      = parseInt(screenQuiz.dataset.quizMaxScore,      10) || 0
 
   // ─── QUESTION DETECTION ──────────────────────────────────────────────────────
   // Support both [data-quiz-element="question"] (quiz.js pages) and
@@ -225,6 +226,7 @@
   var timeRemaining  = QUESTION_TIME
   var timerId        = null
   var refillTimerId  = null
+  var delayTimerId   = null
   var locked         = false
   var selectedLogoId = null   // logo-id the prop is currently resting on
 
@@ -303,7 +305,8 @@
   function stopTimer () {
     clearInterval(timerId)
     clearTimeout(refillTimerId)
-    timerId = refillTimerId = null
+    clearTimeout(delayTimerId)
+    timerId = refillTimerId = delayTimerId = null
     if (UI.timerBar) {
       var pct = (parseFloat(getComputedStyle(UI.timerBar).width) /
                  (UI.timerBar.parentElement ? UI.timerBar.parentElement.offsetWidth : 1) * 100).toFixed(3)
@@ -335,14 +338,18 @@
     if (UI.timerText) UI.timerText.textContent = String(QUESTION_TIME)
     if (timerWrap)    timerWrap.setAttribute('data-warning',  'false')
     if (timerWrap)    timerWrap.setAttribute('data-critical', 'false')
+    var totalDelay = TIME_DELAY
     if (refill && UI.timerBar) {
       UI.timerBar.getBoundingClientRect()
       UI.timerBar.style.transition = 'width ' + REFILL_MS + 'ms ease-out'
       UI.timerBar.style.width      = '100%'
-      refillTimerId = setTimeout(beginCountdown, REFILL_MS)
-      return
+      totalDelay += REFILL_MS
     }
-    beginCountdown()
+    if (totalDelay > 0) {
+      delayTimerId = setTimeout(beginCountdown, totalDelay)
+    } else {
+      beginCountdown()
+    }
   }
 
   // ─── LOGO SWAP (matches quiz.js swapLogo / initLogos) ────────────────────────
@@ -617,7 +624,11 @@
     showOnlyQuestion(index)
     updateProgress()
     setDisabled(getSubmitBtn(), true)
-    setDisabled(getNextBtn(),   true)
+    var nextBtn = getNextBtn()
+    setDisabled(nextBtn, true)
+    if (nextBtn && index === TOTAL_QUESTIONS - 1) {
+      nextBtn.textContent = 'See final score'
+    }
     initHint(qEl)
     initLogos(qEl)
 
