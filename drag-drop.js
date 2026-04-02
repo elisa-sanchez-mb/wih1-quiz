@@ -627,7 +627,8 @@
     var nextBtn = getNextBtn()
     setDisabled(nextBtn, true)
     if (nextBtn && index === TOTAL_QUESTIONS - 1) {
-      nextBtn.textContent = 'See final score'
+      var nextBtnLabel = nextBtn.querySelector('div')
+      if (nextBtnLabel) nextBtnLabel.textContent = 'See final score'
     }
     initHint(qEl)
     initLogos(qEl)
