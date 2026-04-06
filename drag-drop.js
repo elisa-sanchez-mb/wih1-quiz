@@ -1033,6 +1033,7 @@
             addZoneBorder(z)
           })
           if (instrEl) instrEl.style.display = 'none'
+          prevDragY = event.clientY
         },
         move: function (event) {
           if (locked) { snapPropBack(prop); return }
